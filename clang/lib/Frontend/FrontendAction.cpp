@@ -39,6 +39,9 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include "clang/Frontend/ReflectionConsumer.h"
+
 #include <memory>
 #include <system_error>
 using namespace clang;
@@ -177,49 +180,53 @@ FrontendAction::CreateWrappedASTConsumer(CompilerInstance &CI,
   if (!FoundAllPlugins)
     return nullptr;
 
-  // If there are no registered plugins we don't need to wrap the consumer
-  if (FrontendPluginRegistry::begin() == FrontendPluginRegistry::end())
-    return Consumer;
-
-  // If this is a code completion run, avoid invoking the plugin consumers
-  if (CI.hasCodeCompletionConsumer())
-    return Consumer;
-
-  // Collect the list of plugins that go before the main action (in Consumers)
-  // or after it (in AfterConsumers)
   std::vector<std::unique_ptr<ASTConsumer>> Consumers;
   std::vector<std::unique_ptr<ASTConsumer>> AfterConsumers;
-  for (const FrontendPluginRegistry::entry &Plugin :
-       FrontendPluginRegistry::entries()) {
-    std::unique_ptr<PluginASTAction> P = Plugin.instantiate();
-    PluginASTAction::ActionType ActionType = P->getActionType();
-    if (ActionType == PluginASTAction::CmdlineAfterMainAction ||
-        ActionType == PluginASTAction::CmdlineBeforeMainAction) {
-      // This is O(|plugins| * |add_plugins|), but since both numbers are
-      // way below 50 in practice, that's ok.
-      if (llvm::is_contained(CI.getFrontendOpts().AddPluginActions,
-                             Plugin.getName())) {
-        if (ActionType == PluginASTAction::CmdlineBeforeMainAction)
-          ActionType = PluginASTAction::AddBeforeMainAction;
-        else
-          ActionType = PluginASTAction::AddAfterMainAction;
+  // If there are no registered plugins we don't need to wrap the consumer
+  if (FrontendPluginRegistry::begin() != FrontendPluginRegistry::end()) {
+    // If this is a code completion run, avoid invoking the plugin consumers
+    if (!CI.hasCodeCompletionConsumer()) {
+
+      // Collect the list of plugins that go before the main action (in
+      // Consumers) or after it (in AfterConsumers)
+      for (const FrontendPluginRegistry::entry &Plugin :
+           FrontendPluginRegistry::entries()) {
+        std::unique_ptr<PluginASTAction> P = Plugin.instantiate();
+        PluginASTAction::ActionType ActionType = P->getActionType();
+        if (ActionType == PluginASTAction::CmdlineAfterMainAction ||
+            ActionType == PluginASTAction::CmdlineBeforeMainAction) {
+          // This is O(|plugins| * |add_plugins|), but since both numbers are
+          // way below 50 in practice, that's ok.
+          if (llvm::is_contained(CI.getFrontendOpts().AddPluginActions,
+                                 Plugin.getName())) {
+            if (ActionType == PluginASTAction::CmdlineBeforeMainAction)
+              ActionType = PluginASTAction::AddBeforeMainAction;
+            else
+              ActionType = PluginASTAction::AddAfterMainAction;
+          }
+        }
+        if ((ActionType == PluginASTAction::AddBeforeMainAction ||
+             ActionType == PluginASTAction::AddAfterMainAction) &&
+            P->ParseArgs(CI, CI.getFrontendOpts()
+                                 .PluginArgs[std::string(Plugin.getName())])) {
+          std::unique_ptr<ASTConsumer> PluginConsumer =
+              P->CreateASTConsumer(CI, InFile);
+          if (ActionType == PluginASTAction::AddBeforeMainAction) {
+            Consumers.push_back(std::move(PluginConsumer));
+          } else {
+            AfterConsumers.push_back(std::move(PluginConsumer));
+          }
+        }
       }
+
     }
-    if ((ActionType == PluginASTAction::AddBeforeMainAction ||
-         ActionType == PluginASTAction::AddAfterMainAction) &&
-        P->ParseArgs(
-            CI,
-            CI.getFrontendOpts().PluginArgs[std::string(Plugin.getName())])) {
-      std::unique_ptr<ASTConsumer> PluginConsumer = P->CreateASTConsumer(CI, InFile);
-      if (ActionType == PluginASTAction::AddBeforeMainAction) {
-        Consumers.push_back(std::move(PluginConsumer));
-      } else {
-        AfterConsumers.push_back(std::move(PluginConsumer));
-      }
-    }
+
   }
 
+  
+
   // Add to Consumers the main consumer, then all the plugins that go after it
+  Consumers.push_back(std::move(std::make_unique<ReflectionConsumer>(InFile.str())));
   Consumers.push_back(std::move(Consumer));
   if (!AfterConsumers.empty()) {
     // If we have plugins after the main consumer, which may be the codegen

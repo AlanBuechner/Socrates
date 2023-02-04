@@ -1,0 +1,9 @@
+﻿  Building Custom Rule C:/Users/abuechner/source/repos/Socrates/clang/tools/driver/CMakeLists.txt
+  CodeGen.cpp
+  ReflectionData.cpp
+  Source.cpp
+  Utils.cpp
+  Validate.cpp
+CodeGen.cpp(21,42): error C2440: 'initializing': cannot convert from 'const std::string' to 'std::string &'
+CodeGen.cpp(21,24): message : Conversion loses qualifiers
+C:\Users\abuechner\source\repos\Socrates\Socrates\Utils.h(19): error C4716: 'QueueToVector<std::basic_string<char,std::char_traits<char>,std::allocator<char> > >': must return a value

@@ -41,6 +41,7 @@ add_clang_library(clangFrontend
   TextDiagnosticPrinter.cpp
   VerifyDiagnosticConsumer.cpp
   InterfaceStubFunctionsConsumer.cpp
+  ReflectionConsumer.cpp
 
   DEPENDS
   ClangDriverOptions

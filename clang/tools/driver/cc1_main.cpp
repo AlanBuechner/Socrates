@@ -183,6 +183,8 @@ static int PrintSupportedCPUs(std::string TargetStr) {
 }
 
 int cc1_main(ArrayRef<const char *> Argv, const char *Argv0, void *MainAddr) {
+
+  //llvm::errs() << "CC1_MAIN";
   ensureSufficientStack();
 
   std::unique_ptr<CompilerInstance> Clang(new CompilerInstance());

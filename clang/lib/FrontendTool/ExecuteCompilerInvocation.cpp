@@ -42,6 +42,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   StringRef Action("unknown");
   (void)Action;
 
+  //llvm::errs() << std::to_string((int)CI.getFrontendOpts().ProgramAction);
   switch (CI.getFrontendOpts().ProgramAction) {
   case ASTDeclList:            return std::make_unique<ASTDeclListAction>();
   case ASTDump:                return std::make_unique<ASTDumpAction>();
