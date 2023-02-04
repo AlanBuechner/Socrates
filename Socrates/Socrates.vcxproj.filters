@@ -1,9 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <CustomBuild Include="C:\Users\abuechner\source\repos\Socrates\clang\tools\driver\CMakeLists.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ResourceCompile Include="C:\Users\abuechner\source\repos\Socrates\llvm\resources\windows_version_resource.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
@@ -29,8 +26,12 @@
     <ClCompile Include="ReflectionData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Utils.cpp" />
-    <ClCompile Include="CodeGen.cpp" />
+    <ClCompile Include="CodeGen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Validate.h">

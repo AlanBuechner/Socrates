@@ -1,22 +1,3 @@
-set( LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
-  Analysis
-  CodeGen
-  Core
-  IPO
-  AggressiveInstCombine
-  InstCombine
-  Instrumentation
-  MC
-  MCParser
-  ObjCARCOpts
-  Option
-  ScalarOpts
-  Support
-  TransformUtils
-  Vectorize
-  )
-
 # Support plugins.
 if(CLANG_PLUGIN_SUPPORT)
   set(support_plugins SUPPORT_PLUGINS)

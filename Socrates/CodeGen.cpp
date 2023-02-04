@@ -18,7 +18,7 @@ void WriteCode(const fs::path &path, const std::string &projectName, const Refle
 
     const std::string &sname = c.first;
     const std::string &name = c.second.m_Name;
-    std::string &group = c.second.m_Group;
+    const std::string &group = c.second.m_Group;
     const std::vector<Attribute> attrib = c.second.m_Attributes;
     ofs << "static Reflect::Registry::Add<" << sname << "> Class" << name
         << "(\"" << name << "\", \"" << sname << "\", \"" << group

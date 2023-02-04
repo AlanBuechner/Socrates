@@ -16,6 +16,7 @@ template <typename T> std::vector<T> QueueToVector(std::queue<T> q) {
     elems.push_back(q.front());
     q.pop();
   }
+  return elems;
 }
 
 template <typename T>
