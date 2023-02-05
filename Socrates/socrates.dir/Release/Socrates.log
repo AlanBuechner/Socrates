@@ -1,7 +1,8 @@
-﻿  ReflectionData.cpp
+﻿  CodeGen.cpp
+  ReflectionData.cpp
   Source.cpp
   Utils.cpp
-C:\Users\abuechner\source\repos\Socrates\Socrates\Utils.h(19): warning C4715: 'QueueToVector<std::basic_string<char,std::char_traits<char>,std::allocator<char> > >': not all control paths return a value
+  Validate.cpp
 LINK : warning LNK4199: /DELAYLOAD:shell32.dll ignored; no imports found from shell32.dll
 LINK : warning LNK4199: /DELAYLOAD:ole32.dll ignored; no imports found from ole32.dll
   Socrates.vcxproj -> C:\Users\abuechner\source\repos\Socrates\build\Release\bin\Socrates.exe

@@ -46,5 +46,6 @@
     <ClInclude Include="CodeGen.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="Reflection.h" />
   </ItemGroup>
 </Project>

@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 int main(int argc, char **argv) {
   // validate all reflection files are present
   Validate();
-
+  
   // get arguments
   std::string projectDir = argv[1];
   std::string sysIncludesStr = argv[2];
