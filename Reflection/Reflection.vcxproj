@@ -112,12 +112,16 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>
       </SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>"C:\Program Files\CMake\bin\cmake.exe" -E copy $(SolutionDir)x64\$(Configuration)\Reflection.lib $(SolutionDir)Compiler\lib\ReflectionD.lib</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -141,7 +145,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>"C:\Program Files\CMake\bin\cmake.exe" -E copy C:/Users/abuechner/source/repos/Socrates/build/x64/Release/Reflection.lib C:/Users/abuechner/source/repos/ubiq\vendor\Compiler\lib\Reflection.lib</Command>
+      <Command>"C:\Program Files\CMake\bin\cmake.exe" -E copy $(SolutionDir)x64\$(Configuration)\Reflection.lib $(SolutionDir)Compiler\lib\Reflection.lib</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

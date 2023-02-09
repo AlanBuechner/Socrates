@@ -66,7 +66,7 @@
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
     <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
-    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\abuechner\source\repos\Socrates\build\Release\bin\</OutDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)Release\bin\</OutDir>
     <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">socrates.dir\Release\</IntDir>
     <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Socrates</TargetName>
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
@@ -175,7 +175,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\abuechner\source\repos\Socrates\build\tools\clang\tools\driver;C:\Users\abuechner\source\repos\Socrates\clang\tools\driver;C:\Users\abuechner\source\repos\Socrates\clang\include;C:\Users\abuechner\source\repos\Socrates\build\tools\clang\include;C:\Users\abuechner\source\repos\Socrates\build\include;C:\Users\abuechner\source\repos\Socrates\llvm\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /Zc:__cplusplus /bigobj -w14062 /Gw /EHs-c-</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <ConformanceMode>true</ConformanceMode>
@@ -219,7 +219,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Message>
       </Message>
       <Command>setlocal
-"C:\Program Files\CMake\bin\cmake.exe" -E copy C:/Users/abuechner/source/repos/Socrates/build/Release/bin/Socrates.exe C:/Users/abuechner/source/repos/ubiq\vendor\Compiler\bin\Socrates.exe
+"C:\Program Files\CMake\bin\cmake.exe" -E copy $(SolutionDir)Release/bin/Socrates.exe $(SolutionDir)Compiler\bin\Socrates.exe
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
@@ -234,8 +234,9 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <ImportLibrary>C:/Users/abuechner/source/repos/Socrates/build/Release/lib/clang.lib</ImportLibrary>
-      <ProgramDataBaseFile>C:/Users/abuechner/source/repos/Socrates/build/Release/bin/clang.pdb</ProgramDataBaseFile>
+      <ImportLibrary>
+      </ImportLibrary>
+      <ProgramDataBaseFile>$(SolutionDir)Release/bin/clang.pdb</ProgramDataBaseFile>
       <StackReserveSize>10000000</StackReserveSize>
       <SubSystem>Console</SubSystem>
     </Link>
@@ -439,7 +440,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CodeGen.h" />
-    <ClInclude Include="Reflection.h" />
     <ClInclude Include="ReflectionData.h" />
     <ClInclude Include="Utils.h" />
     <ClInclude Include="Validate.h" />
