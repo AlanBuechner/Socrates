@@ -600,7 +600,7 @@ bool RecursiveASTVisitor<Derived>::TraverseConceptExprRequirement(
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseConceptNestedRequirement(
     concepts::NestedRequirement *R) {
-  if (!R->isSubstitutionFailure())
+  if (!R->hasInvalidConstraint())
     return getDerived().TraverseStmt(R->getConstraintExpr());
   return true;
 }
@@ -2553,7 +2553,11 @@ bool RecursiveASTVisitor<Derived>::TraverseInitListExpr(
 // are interleaved.  We also need to watch out for null types (default
 // generic associations).
 DEF_TRAVERSE_STMT(GenericSelectionExpr, {
-  TRY_TO(TraverseStmt(S->getControllingExpr()));
+  if (S->isExprPredicate())
+    TRY_TO(TraverseStmt(S->getControllingExpr()));
+  else
+    TRY_TO(TraverseTypeLoc(S->getControllingType()->getTypeLoc()));
+
   for (const GenericSelectionExpr::Association Assoc : S->associations()) {
     if (TypeSourceInfo *TSI = Assoc.getTypeSourceInfo())
       TRY_TO(TraverseTypeLoc(TSI->getTypeLoc()));
@@ -2852,6 +2856,7 @@ DEF_TRAVERSE_STMT(SubstNonTypeTemplateParmExpr, {})
 DEF_TRAVERSE_STMT(FunctionParmPackExpr, {})
 DEF_TRAVERSE_STMT(CXXFoldExpr, {})
 DEF_TRAVERSE_STMT(AtomicExpr, {})
+DEF_TRAVERSE_STMT(CXXParenListInitExpr, {})
 
 DEF_TRAVERSE_STMT(MaterializeTemporaryExpr, {
   if (S->getLifetimeExtendedTemporaryDecl()) {
@@ -3848,6 +3853,14 @@ bool RecursiveASTVisitor<Derived>::VisitOMPFilterClause(OMPFilterClause *C) {
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPBindClause(OMPBindClause *C) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPXDynCGroupMemClause(
+    OMPXDynCGroupMemClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
+  TRY_TO(TraverseStmt(C->getSize()));
   return true;
 }
 

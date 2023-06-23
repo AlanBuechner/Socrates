@@ -23,7 +23,7 @@ namespace SPIRV {
 /// and external instruction \p Set.
 ///
 /// \return the lowering success status if the called function is a recognized
-/// builtin, None otherwise.
+/// builtin, std::nullopt otherwise.
 ///
 /// \p DemangledCall is the skeleton of the lowered builtin function call.
 /// \p Set is the external instruction set containing the given builtin.
@@ -45,7 +45,7 @@ std::optional<bool> lowerBuiltin(const StringRef DemangledCall,
 /// \return A machine instruction representing the OpType<...> SPIR-V type.
 ///
 /// \p Type is the special opaque/builtin type to be lowered.
-SPIRVType *lowerBuiltinType(const StructType *Type,
+SPIRVType *lowerBuiltinType(const Type *Type,
                             AccessQualifier::AccessQualifier AccessQual,
                             MachineIRBuilder &MIRBuilder,
                             SPIRVGlobalRegistry *GR);

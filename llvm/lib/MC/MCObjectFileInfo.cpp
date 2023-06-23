@@ -8,7 +8,6 @@
 
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/Wasm.h"
@@ -24,6 +23,7 @@
 #include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCSectionXCOFF.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/TargetParser/Triple.h"
 
 using namespace llvm;
 
@@ -356,6 +356,9 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T, bool Large) {
   case Triple::hexagon:
     FDECFIEncoding =
         PositionIndependent ? dwarf::DW_EH_PE_pcrel : dwarf::DW_EH_PE_absptr;
+    break;
+  case Triple::xtensa:
+    FDECFIEncoding = dwarf::DW_EH_PE_sdata4;
     break;
   default:
     FDECFIEncoding = dwarf::DW_EH_PE_pcrel | dwarf::DW_EH_PE_sdata4;
@@ -1162,18 +1165,20 @@ MCObjectFileInfo::getKCFITrapSection(const MCSection &TextSec) const {
 
 MCSection *
 MCObjectFileInfo::getPseudoProbeSection(const MCSection &TextSec) const {
-  if (Ctx->getObjectFileType() == MCContext::IsELF) {
-    const auto &ElfSec = static_cast<const MCSectionELF &>(TextSec);
-    // Create a separate section for probes that comes with a comdat function.
-    if (const MCSymbol *Group = ElfSec.getGroup()) {
-      auto *S = static_cast<MCSectionELF *>(PseudoProbeSection);
-      auto Flags = S->getFlags() | ELF::SHF_GROUP;
-      return Ctx->getELFSection(S->getName(), S->getType(), Flags,
-                                S->getEntrySize(), Group->getName(),
-                                /*IsComdat=*/true);
-    }
+  if (Ctx->getObjectFileType() != MCContext::IsELF)
+    return PseudoProbeSection;
+
+  const auto &ElfSec = static_cast<const MCSectionELF &>(TextSec);
+  unsigned Flags = ELF::SHF_LINK_ORDER;
+  StringRef GroupName;
+  if (const MCSymbol *Group = ElfSec.getGroup()) {
+    GroupName = Group->getName();
+    Flags |= ELF::SHF_GROUP;
   }
-  return PseudoProbeSection;
+
+  return Ctx->getELFSection(PseudoProbeSection->getName(), ELF::SHT_PROGBITS,
+                            Flags, 0, GroupName, true, ElfSec.getUniqueID(),
+                            cast<MCSymbolELF>(TextSec.getBeginSymbol()));
 }
 
 MCSection *

@@ -961,18 +961,30 @@ static bool lowerVectorFCMP(MachineInstr &MI, MachineRegisterInfo &MRI,
   const auto Pred =
       static_cast<CmpInst::Predicate>(MI.getOperand(1).getPredicate());
   Register LHS = MI.getOperand(2).getReg();
-  // TODO: Handle v4s16 case.
   unsigned EltSize = MRI.getType(LHS).getScalarSizeInBits();
-  if (EltSize != 32 && EltSize != 64)
+  if (EltSize == 16 && !ST.hasFullFP16())
+    return false;
+  if (EltSize != 16 && EltSize != 32 && EltSize != 64)
     return false;
   Register RHS = MI.getOperand(3).getReg();
   auto Splat = getAArch64VectorSplat(*MRI.getVRegDef(RHS), MRI);
 
   // Compares against 0 have special target-specific pseudos.
   bool IsZero = Splat && Splat->isCst() && Splat->getCst() == 0;
-  bool Invert;
-  AArch64CC::CondCode CC, CC2;
-  changeVectorFCMPPredToAArch64CC(Pred, CC, CC2, Invert);
+
+
+  bool Invert = false;
+  AArch64CC::CondCode CC, CC2 = AArch64CC::AL;
+  if (Pred == CmpInst::Predicate::FCMP_ORD && IsZero) {
+    // The special case "fcmp ord %a, 0" is the canonical check that LHS isn't
+    // NaN, so equivalent to a == a and doesn't need the two comparisons an
+    // "ord" normally would.
+    RHS = LHS;
+    IsZero = false;
+    CC = AArch64CC::EQ;
+  } else
+    changeVectorFCMPPredToAArch64CC(Pred, CC, CC2, Invert);
+
   bool NoNans = ST.getTargetLowering()->getTargetMachine().Options.NoNaNsFPMath;
 
   // Instead of having an apply function, just build here to simplify things.

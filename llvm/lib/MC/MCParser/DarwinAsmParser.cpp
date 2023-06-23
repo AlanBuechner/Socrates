@@ -9,7 +9,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCContext.h"
@@ -27,6 +26,7 @@
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -872,7 +872,7 @@ bool DarwinAsmParser::parseDirectiveTBSS(StringRef, SMLoc) {
       getContext().getMachOSection("__DATA", "__thread_bss",
                                    MachO::S_THREAD_LOCAL_ZEROFILL, 0,
                                    SectionKind::getThreadBSS()),
-      Sym, Size, 1 << Pow2Alignment);
+      Sym, Size, Align(1ULL << Pow2Alignment));
 
   return false;
 }
@@ -1130,7 +1130,7 @@ bool DarwinAsmParser::parseVersionMin(StringRef Directive, SMLoc Loc,
   if (isSDKVersionToken(getLexer().getTok()) && parseSDKVersion(SDKVersion))
     return true;
 
-  if (parseToken(AsmToken::EndOfStatement))
+  if (parseEOL())
     return addErrorSuffix(Twine(" in '") + Directive + "' directive");
 
   Triple::OSType ExpectedOS = getOSTypeFromMCVM(Type);
@@ -1191,7 +1191,7 @@ bool DarwinAsmParser::parseBuildVersion(StringRef Directive, SMLoc Loc) {
   if (isSDKVersionToken(getLexer().getTok()) && parseSDKVersion(SDKVersion))
     return true;
 
-  if (parseToken(AsmToken::EndOfStatement))
+  if (parseEOL())
     return addErrorSuffix(" in '.build_version' directive");
 
   Triple::OSType ExpectedOS

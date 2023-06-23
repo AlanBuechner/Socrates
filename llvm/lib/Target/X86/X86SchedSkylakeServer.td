@@ -90,7 +90,7 @@ def : ReadAdvance<ReadInt2Fpu, 0>;
 multiclass SKXWriteResPair<X86FoldableSchedWrite SchedRW,
                           list<ProcResourceKind> ExePorts,
                           int Lat, list<int> Res = [1], int UOps = 1,
-                          int LoadLat = 5> {
+                          int LoadLat = 5, int LoadUOps = 1> {
   // Register variant is using a single cycle on ExePort.
   def : WriteRes<SchedRW, ExePorts> {
     let Latency = Lat;
@@ -103,7 +103,7 @@ multiclass SKXWriteResPair<X86FoldableSchedWrite SchedRW,
   def : WriteRes<SchedRW.Folded, !listconcat([SKXPort23], ExePorts)> {
     let Latency = !add(Lat, LoadLat);
     let ResourceCycles = !listconcat([1], Res);
-    let NumMicroOps = !add(UOps, 1);
+    let NumMicroOps = !add(UOps, LoadUOps);
   }
 }
 
@@ -236,10 +236,10 @@ defm : X86WriteRes<WriteFStoreNT,      [SKXPort237,SKXPort4], 1, [1,1], 2>;
 defm : X86WriteRes<WriteFStoreNTX,     [SKXPort237,SKXPort4], 1, [1,1], 2>;
 defm : X86WriteRes<WriteFStoreNTY,     [SKXPort237,SKXPort4], 1, [1,1], 2>;
 
-defm : X86WriteRes<WriteFMaskedStore32,  [SKXPort237,SKXPort0], 2, [1,1], 2>;
-defm : X86WriteRes<WriteFMaskedStore32Y, [SKXPort237,SKXPort0], 2, [1,1], 2>;
-defm : X86WriteRes<WriteFMaskedStore64,  [SKXPort237,SKXPort0], 2, [1,1], 2>;
-defm : X86WriteRes<WriteFMaskedStore64Y, [SKXPort237,SKXPort0], 2, [1,1], 2>;
+defm : X86WriteRes<WriteFMaskedStore32,  [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
+defm : X86WriteRes<WriteFMaskedStore32Y, [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
+defm : X86WriteRes<WriteFMaskedStore64,  [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
+defm : X86WriteRes<WriteFMaskedStore64Y, [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
 
 defm : X86WriteRes<WriteFMove,         [SKXPort015], 1, [1], 1>;
 defm : X86WriteRes<WriteFMoveX,        [SKXPort015], 1, [1], 1>;
@@ -352,10 +352,10 @@ defm : X86WriteRes<WriteVecStoreX,       [SKXPort237,SKXPort4], 1, [1,1], 2>;
 defm : X86WriteRes<WriteVecStoreY,       [SKXPort237,SKXPort4], 1, [1,1], 2>;
 defm : X86WriteRes<WriteVecStoreNT,      [SKXPort237,SKXPort4], 1, [1,1], 2>;
 defm : X86WriteRes<WriteVecStoreNTY,     [SKXPort237,SKXPort4], 1, [1,1], 2>;
-defm : X86WriteRes<WriteVecMaskedStore32,  [SKXPort237,SKXPort0], 2, [1,1], 2>;
-defm : X86WriteRes<WriteVecMaskedStore32Y, [SKXPort237,SKXPort0], 2, [1,1], 2>;
-defm : X86WriteRes<WriteVecMaskedStore64,  [SKXPort237,SKXPort0], 2, [1,1], 2>;
-defm : X86WriteRes<WriteVecMaskedStore64Y, [SKXPort237,SKXPort0], 2, [1,1], 2>;
+defm : X86WriteRes<WriteVecMaskedStore32,  [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
+defm : X86WriteRes<WriteVecMaskedStore32Y, [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
+defm : X86WriteRes<WriteVecMaskedStore64,  [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
+defm : X86WriteRes<WriteVecMaskedStore64Y, [SKXPort23,SKXPort0,SKXPort4], 2, [1,1,1], 2>;
 defm : X86WriteRes<WriteVecMove,         [SKXPort05],  1, [1], 1>;
 defm : X86WriteRes<WriteVecMoveX,        [SKXPort015], 1, [1], 1>;
 defm : X86WriteRes<WriteVecMoveY,        [SKXPort015], 1, [1], 1>;

@@ -13,7 +13,6 @@
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/None.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
@@ -103,9 +102,17 @@ Value *IRBuilderBase::CreateVScale(Constant *Scaling, const Twine &Name) {
   Function *TheFn =
       Intrinsic::getDeclaration(M, Intrinsic::vscale, {Scaling->getType()});
   CallInst *CI = CreateCall(TheFn, {}, {}, Name);
-  return cast<ConstantInt>(Scaling)->getSExtValue() == 1
-             ? CI
-             : CreateMul(CI, Scaling);
+  return cast<ConstantInt>(Scaling)->isOne() ? CI : CreateMul(CI, Scaling);
+}
+
+Value *IRBuilderBase::CreateElementCount(Type *DstType, ElementCount EC) {
+  Constant *MinEC = ConstantInt::get(DstType, EC.getKnownMinValue());
+  return EC.isScalable() ? CreateVScale(MinEC) : MinEC;
+}
+
+Value *IRBuilderBase::CreateTypeSize(Type *DstType, TypeSize Size) {
+  Constant *MinSize = ConstantInt::get(DstType, Size.getKnownMinValue());
+  return Size.isScalable() ? CreateVScale(MinSize) : MinSize;
 }
 
 Value *IRBuilderBase::CreateStepVector(Type *DstType, const Twine &Name) {
@@ -475,6 +482,14 @@ CallInst *IRBuilderBase::CreateFPMinReduce(Value *Src) {
   return getReductionIntrinsic(Intrinsic::vector_reduce_fmin, Src);
 }
 
+CallInst *IRBuilderBase::CreateFPMaximumReduce(Value *Src) {
+  return getReductionIntrinsic(Intrinsic::vector_reduce_fmaximum, Src);
+}
+
+CallInst *IRBuilderBase::CreateFPMinimumReduce(Value *Src) {
+  return getReductionIntrinsic(Intrinsic::vector_reduce_fminimum, Src);
+}
+
 CallInst *IRBuilderBase::CreateLifetimeStart(Value *Ptr, ConstantInt *Size) {
   assert(isa<PointerType>(Ptr->getType()) &&
          "lifetime.start only applies to pointers.");
@@ -654,8 +669,7 @@ CallInst *IRBuilderBase::CreateMaskedGather(Type *Ty, Value *Ptrs,
   assert(NumElts == PtrsTy->getElementCount() && "Element count mismatch");
 
   if (!Mask)
-    Mask = Constant::getAllOnesValue(
-        VectorType::get(Type::getInt1Ty(Context), NumElts));
+    Mask = getAllOnesMask(NumElts);
 
   if (!PassThru)
     PassThru = PoisonValue::get(Ty);
@@ -690,8 +704,7 @@ CallInst *IRBuilderBase::CreateMaskedScatter(Value *Data, Value *Ptrs,
 #endif
 
   if (!Mask)
-    Mask = Constant::getAllOnesValue(
-        VectorType::get(Type::getInt1Ty(Context), NumElts));
+    Mask = getAllOnesMask(NumElts);
 
   Type *OverloadedTypes[] = {DataTy, PtrsTy};
   Value *Ops[] = {Data, Ptrs, getInt32(Alignment.value()), Mask};
@@ -1258,10 +1271,8 @@ Value *IRBuilderBase::CreateVectorSplat(ElementCount EC, Value *V,
   assert(EC.isNonZero() && "Cannot splat to an empty vector!");
 
   // First insert it into a poison vector so we can shuffle it.
-  Type *I32Ty = getInt32Ty();
   Value *Poison = PoisonValue::get(VectorType::get(V->getType(), EC));
-  V = CreateInsertElement(Poison, V, ConstantInt::get(I32Ty, 0),
-                          Name + ".splatinsert");
+  V = CreateInsertElement(Poison, V, getInt64(0), Name + ".splatinsert");
 
   // Shuffle the value across the desired number of elements.
   SmallVector<int, 16> Zeros;
@@ -1370,6 +1381,14 @@ Value *IRBuilderBase::CreatePreserveStructAccessIndex(
     Fn->setMetadata(LLVMContext::MD_preserve_access_index, DbgInfo);
 
   return Fn;
+}
+
+Value *IRBuilderBase::createIsFPClass(Value *FPNum, unsigned Test) {
+  ConstantInt *TestV = getInt32(Test);
+  Module *M = BB->getParent()->getParent();
+  Function *FnIsFPClass =
+      Intrinsic::getDeclaration(M, Intrinsic::is_fpclass, {FPNum->getType()});
+  return CreateCall(FnIsFPClass, {FPNum, TestV});
 }
 
 CallInst *IRBuilderBase::CreateAlignmentAssumptionHelper(const DataLayout &DL,

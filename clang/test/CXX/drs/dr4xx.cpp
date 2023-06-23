@@ -3,7 +3,7 @@
 // RUN: env ASAN_OPTIONS=detect_stack_use_after_return=0 %clang_cc1 -std=c++14 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: env ASAN_OPTIONS=detect_stack_use_after_return=0 %clang_cc1 -std=c++17 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: env ASAN_OPTIONS=detect_stack_use_after_return=0 %clang_cc1 -std=c++20 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: env ASAN_OPTIONS=detect_stack_use_after_return=0 %clang_cc1 -std=c++2b %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
+// RUN: env ASAN_OPTIONS=detect_stack_use_after_return=0 %clang_cc1 -std=c++23 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 
 // FIXME: __SIZE_TYPE__ expands to 'long long' on some targets.
 __extension__ typedef __SIZE_TYPE__ size_t;
@@ -124,6 +124,7 @@ namespace dr406 { // dr406: yes
 }
 
 namespace dr407 { // dr407: 3.8
+                  // NB: reused by dr1894 and dr2199
   struct S;
   typedef struct S S;
   void f() {
@@ -314,6 +315,50 @@ namespace dr417 { // dr417: no
     struct dr417::H {}; // expected-error {{namespace 'M' does not enclose}}
   }
 }
+
+namespace dr418 { // dr418: no
+namespace example1 {
+void f1(int, int = 0);
+void f1(int = 0, int);
+
+void g() { f1(); }
+} // namespace example1
+
+namespace example2 {
+namespace A {
+void f2(int); // #dr418-f2-decl
+}
+namespace B {
+using A::f2;
+}
+namespace A {
+void f2(int = 3);
+}
+void g2() {
+  using B::f2;
+  f2(); // expected-error {{no matching function}}
+  // expected-note@#dr418-f2-decl {{requires 1 argument}}
+}
+} // namespace example2
+
+// example from [over.match.best]/4
+namespace example3 {
+namespace A {
+extern "C" void f(int = 5);
+}
+namespace B {
+extern "C" void f(int = 5);
+}
+
+using A::f;
+using B::f;
+
+void use() {
+  f(3);
+  f(); // FIXME: this should fail
+}
+} // namespace example3
+} // namespace dr418
 
 namespace dr420 { // dr420: yes
   template<typename T> struct ptr {

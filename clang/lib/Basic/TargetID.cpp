@@ -8,10 +8,11 @@
 
 #include "clang/Basic/TargetID.h"
 #include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/Triple.h"
-#include "llvm/Support/TargetParser.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/TargetParser.h"
+#include "llvm/TargetParser/Triple.h"
 #include <map>
+#include <optional>
 
 namespace clang {
 
@@ -62,7 +63,7 @@ llvm::StringRef getProcessorFromTargetID(const llvm::Triple &T,
 // A target ID is a processor name followed by a list of target features
 // delimited by colon. Each target feature is a string post-fixed by a plus
 // or minus sign, e.g. gfx908:sramecc+:xnack-.
-static llvm::Optional<llvm::StringRef>
+static std::optional<llvm::StringRef>
 parseTargetIDWithFormatCheckingOnly(llvm::StringRef TargetID,
                                     llvm::StringMap<bool> *FeatureMap) {
   llvm::StringRef Processor;
@@ -100,7 +101,7 @@ parseTargetIDWithFormatCheckingOnly(llvm::StringRef TargetID,
   return Processor;
 }
 
-llvm::Optional<llvm::StringRef>
+std::optional<llvm::StringRef>
 parseTargetID(const llvm::Triple &T, llvm::StringRef TargetID,
               llvm::StringMap<bool> *FeatureMap) {
   auto OptionalProcessor =
@@ -132,7 +133,7 @@ std::string getCanonicalTargetID(llvm::StringRef Processor,
   std::map<const llvm::StringRef, bool> OrderedMap;
   for (const auto &F : Features)
     OrderedMap[F.first()] = F.second;
-  for (auto F : OrderedMap)
+  for (const auto &F : OrderedMap)
     TargetID = TargetID + ':' + F.first.str() + (F.second ? "+" : "-");
   return TargetID;
 }

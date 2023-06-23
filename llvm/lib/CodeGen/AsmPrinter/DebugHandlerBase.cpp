@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/DebugHandlerBase.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -30,7 +29,7 @@ using namespace llvm;
 /// variable's lexical scope instruction ranges.
 static cl::opt<bool> TrimVarLocs("trim-var-locs", cl::Hidden, cl::init(true));
 
-Optional<DbgVariableLocation>
+std::optional<DbgVariableLocation>
 DbgVariableLocation::extractFromMachineInstruction(
     const MachineInstr &Instruction) {
   DbgVariableLocation Location;
@@ -224,6 +223,7 @@ bool DebugHandlerBase::isUnsignedDIType(const DIType *Ty) {
           Encoding == dwarf::DW_ATE_signed_char ||
           Encoding == dwarf::DW_ATE_float || Encoding == dwarf::DW_ATE_UTF ||
           Encoding == dwarf::DW_ATE_boolean ||
+          Encoding == dwarf::DW_ATE_complex_float ||
           (Ty->getTag() == dwarf::DW_TAG_unspecified_type &&
            Ty->getName() == "decltype(nullptr)")) &&
          "Unsupported encoding");
@@ -274,7 +274,7 @@ void DebugHandlerBase::beginFunction(const MachineFunction *MF) {
   InstOrdering.initialize(*MF);
   if (TrimVarLocs)
     DbgValues.trimLocationRanges(*MF, LScopes, InstOrdering);
-  LLVM_DEBUG(DbgValues.dump());
+  LLVM_DEBUG(DbgValues.dump(MF->getName()));
 
   // Request labels for the full history.
   for (const auto &I : DbgValues) {
@@ -417,6 +417,7 @@ void DebugHandlerBase::endFunction(const MachineFunction *MF) {
 }
 
 void DebugHandlerBase::beginBasicBlockSection(const MachineBasicBlock &MBB) {
+  EpilogBeginBlock = nullptr;
   if (!MBB.isEntryBlock())
     PrevLabel = MBB.getSymbol();
 }

@@ -170,7 +170,7 @@ public:
             std::map<DebugAddressRangesVector, uint64_t> &CachedRanges);
 
   /// Add ranges and return offset into section.
-  virtual uint64_t addRanges(const DebugAddressRangesVector &Ranges);
+  virtual uint64_t addRanges(DebugAddressRangesVector &Ranges);
 
   /// Returns an offset of an empty address ranges list that is always written
   /// to .debug_ranges
@@ -232,7 +232,7 @@ public:
       std::map<DebugAddressRangesVector, uint64_t> &CachedRanges) override;
 
   /// Add ranges and return offset into section.
-  uint64_t addRanges(const DebugAddressRangesVector &Ranges) override;
+  uint64_t addRanges(DebugAddressRangesVector &Ranges) override;
 
   std::unique_ptr<DebugBufferVector> releaseBuffer() override {
     return std::move(RangesBuffer);
@@ -431,7 +431,7 @@ public:
   void updateAddressMap(uint32_t Index, uint32_t Address);
 
   /// Writes out current sections entry into .debug_str_offsets.
-  void finalizeSection();
+  void finalizeSection(DWARFUnit &Unit);
 
   /// Returns False if no strings were added to .debug_str.
   bool isFinalized() const { return !StrOffsetsBuffer->empty(); }
@@ -445,8 +445,10 @@ private:
   std::unique_ptr<DebugStrOffsetsBufferVector> StrOffsetsBuffer;
   std::unique_ptr<raw_svector_ostream> StrOffsetsStream;
   std::map<uint32_t, uint32_t> IndexToAddressMap;
+  DenseSet<uint64_t> ProcessedBaseOffsets;
   // Section size not including header.
   uint32_t CurrentSectionSize{0};
+  bool StrOffsetSectionWasModified = false;
 };
 
 using DebugStrBufferVector = SmallVector<char, 16>;
@@ -1001,7 +1003,7 @@ class DebugAbbrevWriter {
   DWARFContext &Context;
 
   /// DWO ID used to identify unit contribution in DWP.
-  Optional<uint64_t> DWOId;
+  std::optional<uint64_t> DWOId;
 
   /// Add abbreviations from compile/type \p Unit to the writer.
   void addUnitAbbreviations(DWARFUnit &Unit);
@@ -1018,7 +1020,7 @@ public:
   ///       If type units are used, the caller is responsible for verifying
   ///       that abbreviations are shared by CU and TUs.
   DebugAbbrevWriter(DWARFContext &Context,
-                    Optional<uint64_t> DWOId = std::nullopt)
+                    std::optional<uint64_t> DWOId = std::nullopt)
       : Context(Context), DWOId(DWOId) {}
 
   DebugAbbrevWriter(const DebugAbbrevWriter &) = delete;

@@ -1,5 +1,4 @@
 ; RUN: opt -S -mtriple=amdgcn-amd-amdhsa -passes=infer-address-spaces %s | FileCheck %s
-; RUN: opt -S -mtriple=amdgcn-amd-amdhsa -passes=infer-address-spaces %s | FileCheck %s
 ; Ports of most of test/CodeGen/NVPTX/access-non-generic.ll
 
 @scalar = internal addrspace(3) global float 0.0, align 4
@@ -167,10 +166,12 @@ exit:                                             ; preds = %loop
 }
 
 ; CHECK-LABEL: @select_bug(
-; CHECK: %add.ptr157 = getelementptr inbounds i64, ptr undef, i64 select (i1 icmp ne (ptr inttoptr (i64 4873 to ptr), ptr null), i64 73, i64 93)
+; CHECK: %sel = select i1 icmp ne (ptr inttoptr (i64 4873 to ptr), ptr null), i64 73, i64 93
+; CHECK: %add.ptr157 = getelementptr inbounds i64, ptr undef, i64 %sel
 ; CHECK: %cmp169 = icmp uge ptr undef, %add.ptr157
 define void @select_bug() #0 {
-  %add.ptr157 = getelementptr inbounds i64, ptr undef, i64 select (i1 icmp ne (ptr inttoptr (i64 4873 to ptr), ptr null), i64 73, i64 93)
+  %sel = select i1 icmp ne (ptr inttoptr (i64 4873 to ptr), ptr null), i64 73, i64 93
+  %add.ptr157 = getelementptr inbounds i64, ptr undef, i64 %sel
   %cmp169 = icmp uge ptr undef, %add.ptr157
   unreachable
 }

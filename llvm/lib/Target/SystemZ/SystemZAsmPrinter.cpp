@@ -530,11 +530,6 @@ void SystemZAsmPrinter::emitInstruction(const MachineInstr *MI) {
         .addImm(15).addReg(SystemZ::R0D);
     break;
 
-  // Emit nothing here but a comment if we can.
-  case SystemZ::MemBarrier:
-    OutStreamer->emitRawComment("MEMBARRIER");
-    return;
-
   // We want to emit "j .+2" for traps, jumping to the relative immediate field
   // of the jump instruction, which is an illegal instruction. We cannot emit a
   // "." symbol, so create and emit a temp label before the instruction and use
@@ -765,7 +760,7 @@ void SystemZAsmPrinter::LowerPATCHPOINT(const MachineInstr &MI,
 void SystemZAsmPrinter::emitAttributes(Module &M) {
   if (M.getModuleFlag("s390x-visible-vector-ABI")) {
     bool HasVectorFeature =
-      TM.getMCSubtargetInfo()->getFeatureBits()[SystemZ::FeatureVector];
+      TM.getMCSubtargetInfo()->hasFeature(SystemZ::FeatureVector);
     OutStreamer->emitGNUAttribute(8, HasVectorFeature ? 2 : 1);
   }
 }
@@ -1063,7 +1058,7 @@ void SystemZAsmPrinter::emitPPA1(MCSymbol *FnEndSym) {
 
   OutStreamer->AddComment("Length/4 of Parms");
   OutStreamer->emitInt16(
-      static_cast<uint16_t>(MFFrame.getMaxCallFrameSize() / 4)); // Parms/4.
+      static_cast<uint16_t>(ZFI->getSizeOfFnParams() / 4)); // Parms/4.
   OutStreamer->AddComment("Length of Code");
   OutStreamer->emitAbsoluteSymbolDiff(FnEndSym, CurrentFnEPMarkerSym, 4);
 

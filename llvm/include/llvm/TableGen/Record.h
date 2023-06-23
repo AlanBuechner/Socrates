@@ -142,8 +142,6 @@ public:
   std::string getAsString() const override;
 
   bool typeIsConvertibleTo(const RecTy *RHS) const override;
-
-  bool typeIsA(const RecTy *RHS) const override;
 };
 
 /// 'int' - Represent an integer value of no particular size
@@ -255,7 +253,7 @@ public:
   void Profile(FoldingSetNodeID &ID) const;
 
   ArrayRef<Record *> getClasses() const {
-    return makeArrayRef(getTrailingObjects<Record *>(), NumClasses);
+    return ArrayRef(getTrailingObjects<Record *>(), NumClasses);
   }
 
   using const_record_iterator = Record * const *;
@@ -316,7 +314,6 @@ protected:
     IK_AnonymousNameInit,
     IK_StringInit,
     IK_VarInit,
-    IK_VarListElementInit,
     IK_VarBitInit,
     IK_VarDefInit,
     IK_LastTypedInit,
@@ -386,14 +383,6 @@ public:
     return nullptr;
   }
 
-  /// This function is used to implement the list slice
-  /// selection operator.  Given a value, it selects the specified list
-  /// elements, returning them as a new \p Init of type \p list. If it
-  /// is not legal to use the slice operator, null is returned.
-  virtual Init *convertInitListSlice(ArrayRef<unsigned> Elements) const {
-    return nullptr;
-  }
-
   /// This function is used to implement the FieldInit class.
   /// Implementors of this method should return the type of the named
   /// field if they are of type record.
@@ -445,7 +434,6 @@ public:
   Init *convertInitializerTo(RecTy *Ty) const override;
 
   Init *convertInitializerBitRange(ArrayRef<unsigned> Bits) const override;
-  Init *convertInitListSlice(ArrayRef<unsigned> Elements) const override;
 
   /// This method is used to implement the FieldInit class.
   /// Implementors of this method should return the type of the named field if
@@ -726,8 +714,6 @@ public:
 
   Record *getElementAsRecord(unsigned i) const;
 
-  Init *convertInitListSlice(ArrayRef<unsigned> Elements) const override;
-
   Init *convertInitializerTo(RecTy *Ty) const override;
 
   /// This method is used by classes that refer to other
@@ -742,7 +728,7 @@ public:
   std::string getAsString() const override;
 
   ArrayRef<Init*> getValues() const {
-    return makeArrayRef(getTrailingObjects<Init *>(), NumValues);
+    return ArrayRef(getTrailingObjects<Init *>(), NumValues);
   }
 
   const_iterator begin() const { return getTrailingObjects<Init *>(); }
@@ -785,7 +771,18 @@ public:
 ///
 class UnOpInit : public OpInit, public FoldingSetNode {
 public:
-  enum UnaryOp : uint8_t { CAST, NOT, HEAD, TAIL, SIZE, EMPTY, GETDAGOP, LOG2 };
+  enum UnaryOp : uint8_t {
+    TOLOWER,
+    TOUPPER,
+    CAST,
+    NOT,
+    HEAD,
+    TAIL,
+    SIZE,
+    EMPTY,
+    GETDAGOP,
+    LOG2
+  };
 
 private:
   Init *LHS;
@@ -847,6 +844,11 @@ public:
     SRL,
     LISTCONCAT,
     LISTSPLAT,
+    LISTREMOVE,
+    LISTELEM,
+    LISTSLICE,
+    RANGE,
+    RANGEC,
     STRCONCAT,
     INTERLEAVE,
     CONCAT,
@@ -856,7 +858,9 @@ public:
     LT,
     GE,
     GT,
-    SETDAGOP
+    GETDAGARG,
+    GETDAGNAME,
+    SETDAGOP,
   };
 
 private:
@@ -900,6 +904,8 @@ public:
   Init *getLHS() const { return LHS; }
   Init *getRHS() const { return RHS; }
 
+  std::optional<bool> CompareInit(unsigned Opc, Init *LHS, Init *RHS) const;
+
   // Fold - If possible, fold this to a simpler init.  Return this if not
   // possible to fold.
   Init *Fold(Record *CurRec) const;
@@ -912,7 +918,17 @@ public:
 /// !op (X, Y, Z) - Combine two inits.
 class TernOpInit : public OpInit, public FoldingSetNode {
 public:
-  enum TernaryOp : uint8_t { SUBST, FOREACH, FILTER, IF, DAG, SUBSTR, FIND };
+  enum TernaryOp : uint8_t {
+    SUBST,
+    FOREACH,
+    FILTER,
+    IF,
+    DAG,
+    SUBSTR,
+    FIND,
+    SETDAGARG,
+    SETDAGNAME,
+  };
 
 private:
   Init *LHS, *MHS, *RHS;
@@ -1015,11 +1031,11 @@ public:
   }
 
   ArrayRef<Init *> getConds() const {
-    return makeArrayRef(getTrailingObjects<Init *>(), NumConds);
+    return ArrayRef(getTrailingObjects<Init *>(), NumConds);
   }
 
   ArrayRef<Init *> getVals() const {
-    return makeArrayRef(getTrailingObjects<Init *>()+NumConds, NumConds);
+    return ArrayRef(getTrailingObjects<Init *>() + NumConds, NumConds);
   }
 
   Init *Fold(Record *CurRec) const;
@@ -1226,39 +1242,6 @@ public:
   }
 };
 
-/// List[4] - Represent access to one element of a var or
-/// field.
-class VarListElementInit : public TypedInit {
-  TypedInit *TI;
-  unsigned Element;
-
-  VarListElementInit(TypedInit *T, unsigned E)
-      : TypedInit(IK_VarListElementInit,
-                  cast<ListRecTy>(T->getType())->getElementType()),
-        TI(T), Element(E) {
-    assert(T->getType() && isa<ListRecTy>(T->getType()) &&
-           "Illegal VarBitInit expression!");
-  }
-
-public:
-  VarListElementInit(const VarListElementInit &) = delete;
-  VarListElementInit &operator=(const VarListElementInit &) = delete;
-
-  static bool classof(const Init *I) {
-    return I->getKind() == IK_VarListElementInit;
-  }
-
-  static VarListElementInit *get(TypedInit *T, unsigned E);
-
-  TypedInit *getVariable() const { return TI; }
-  unsigned getElementNum() const { return Element; }
-
-  std::string getAsString() const override;
-  Init *resolveReferences(Resolver &R) const override;
-
-  Init *getBit(unsigned Bit) const override;
-};
-
 /// AL - Represent a reference to a 'def' in the description
 class DefInit : public TypedInit {
   friend class Record;
@@ -1337,7 +1320,7 @@ public:
   size_t         args_size () const { return NumArgs; }
   bool           args_empty() const { return NumArgs == 0; }
 
-  ArrayRef<Init *> args() const { return makeArrayRef(args_begin(), NumArgs); }
+  ArrayRef<Init *> args() const { return ArrayRef(args_begin(), NumArgs); }
 
   Init *getBit(unsigned Bit) const override {
     llvm_unreachable("Illegal bit reference off anonymous def");
@@ -1434,6 +1417,10 @@ public:
     return getTrailingObjects<Init *>()[Num];
   }
 
+  /// This method looks up the specified argument name and returns its argument
+  /// number or std::nullopt if that argument name does not exist.
+  std::optional<unsigned> getArgNo(StringRef Name) const;
+
   StringInit *getArgName(unsigned Num) const {
     assert(Num < NumArgNames && "Arg number out of range!");
     return getTrailingObjects<StringInit *>()[Num];
@@ -1445,11 +1432,11 @@ public:
   }
 
   ArrayRef<Init *> getArgs() const {
-    return makeArrayRef(getTrailingObjects<Init *>(), NumArgs);
+    return ArrayRef(getTrailingObjects<Init *>(), NumArgs);
   }
 
   ArrayRef<StringInit *> getArgNames() const {
-    return makeArrayRef(getTrailingObjects<StringInit *>(), NumArgNames);
+    return ArrayRef(getTrailingObjects<StringInit *>(), NumArgNames);
   }
 
   Init *resolveReferences(Resolver &R) const override;
@@ -1825,7 +1812,7 @@ public:
 
   /// This method looks up the specified field and returns its value as a
   /// string, throwing an exception if the value is not a string and
-  /// llvm::Optional() if the field does not exist.
+  /// std::nullopt if the field does not exist.
   std::optional<StringRef> getValueAsOptionalString(StringRef FieldName) const;
 
   /// This method looks up the specified field and returns its value as a

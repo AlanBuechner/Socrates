@@ -11,7 +11,6 @@
 
 #include "llvm/Transforms/Utils/LoopPeel.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/Loads.h"
@@ -161,7 +160,7 @@ public:
 
   // Calculate the sufficient minimum number of iterations of the loop to peel
   // such that phi instructions become determined (subject to allowable limits)
-  Optional<unsigned> calculateIterationsToPeel();
+  std::optional<unsigned> calculateIterationsToPeel();
 
 protected:
   using PeelCounter = std::optional<unsigned>;
@@ -253,7 +252,7 @@ PhiAnalyzer::PeelCounter PhiAnalyzer::calculate(const Value &V) {
   return Unknown;
 }
 
-Optional<unsigned> PhiAnalyzer::calculateIterationsToPeel() {
+std::optional<unsigned> PhiAnalyzer::calculateIterationsToPeel() {
   unsigned Iterations = 0;
   for (auto &PHI : L.getHeader()->phis()) {
     PeelCounter ToInvariance = calculate(PHI);
@@ -265,7 +264,7 @@ Optional<unsigned> PhiAnalyzer::calculateIterationsToPeel() {
     }
   }
   assert((Iterations <= MaxIterations) && "bad result in phi analysis");
-  return Iterations ? Optional<unsigned>(Iterations) : std::nullopt;
+  return Iterations ? std::optional<unsigned>(Iterations) : std::nullopt;
 }
 
 } // unnamed namespace
@@ -346,20 +345,20 @@ static unsigned countToEliminateCompares(Loop &L, unsigned MaxPeelCount,
   assert(L.isLoopSimplifyForm() && "Loop needs to be in loop simplify form");
   unsigned DesiredPeelCount = 0;
 
-  for (auto *BB : L.blocks()) {
-    auto *BI = dyn_cast<BranchInst>(BB->getTerminator());
-    if (!BI || BI->isUnconditional())
-      continue;
+  // Do not peel the entire loop.
+  const SCEV *BE = SE.getConstantMaxBackedgeTakenCount(&L);
+  if (const SCEVConstant *SC = dyn_cast<SCEVConstant>(BE))
+    MaxPeelCount =
+        std::min((unsigned)SC->getAPInt().getLimitedValue() - 1, MaxPeelCount);
 
-    // Ignore loop exit condition.
-    if (L.getLoopLatch() == BB)
-      continue;
+  auto ComputePeelCount = [&](Value *Condition) -> void {
+    if (!Condition->getType()->isIntegerTy())
+      return;
 
-    Value *Condition = BI->getCondition();
     Value *LeftVal, *RightVal;
     CmpInst::Predicate Pred;
     if (!match(Condition, m_ICmp(Pred, m_Value(LeftVal), m_Value(RightVal))))
-      continue;
+      return;
 
     const SCEV *LeftSCEV = SE.getSCEV(LeftVal);
     const SCEV *RightSCEV = SE.getSCEV(RightVal);
@@ -367,7 +366,7 @@ static unsigned countToEliminateCompares(Loop &L, unsigned MaxPeelCount,
     // Do not consider predicates that are known to be true or false
     // independently of the loop iteration.
     if (SE.evaluatePredicate(Pred, LeftSCEV, RightSCEV))
-      continue;
+      return;
 
     // Check if we have a condition with one AddRec and one non AddRec
     // expression. Normalize LeftSCEV to be the AddRec.
@@ -376,7 +375,7 @@ static unsigned countToEliminateCompares(Loop &L, unsigned MaxPeelCount,
         std::swap(LeftSCEV, RightSCEV);
         Pred = ICmpInst::getSwappedPredicate(Pred);
       } else
-        continue;
+        return;
     }
 
     const SCEVAddRecExpr *LeftAR = cast<SCEVAddRecExpr>(LeftSCEV);
@@ -384,10 +383,10 @@ static unsigned countToEliminateCompares(Loop &L, unsigned MaxPeelCount,
     // Avoid huge SCEV computations in the loop below, make sure we only
     // consider AddRecs of the loop we are trying to peel.
     if (!LeftAR->isAffine() || LeftAR->getLoop() != &L)
-      continue;
+      return;
     if (!(ICmpInst::isEquality(Pred) && LeftAR->hasNoSelfWrap()) &&
         !SE.getMonotonicPredicateType(LeftAR, Pred))
-      continue;
+      return;
 
     // Check if extending the current DesiredPeelCount lets us evaluate Pred
     // or !Pred in the loop body statically.
@@ -423,7 +422,7 @@ static unsigned countToEliminateCompares(Loop &L, unsigned MaxPeelCount,
     // first iteration of the loop body after peeling?
     if (!SE.isKnownPredicate(ICmpInst::getInversePredicate(Pred), IterVal,
                              RightSCEV))
-      continue; // If not, give up.
+      return; // If not, give up.
 
     // However, for equality comparisons, that isn't always sufficient to
     // eliminate the comparsion in loop body, we may need to peel one more
@@ -434,11 +433,28 @@ static unsigned countToEliminateCompares(Loop &L, unsigned MaxPeelCount,
         !SE.isKnownPredicate(Pred, IterVal, RightSCEV) &&
         SE.isKnownPredicate(Pred, NextIterVal, RightSCEV)) {
       if (!CanPeelOneMoreIteration())
-        continue; // Need to peel one more iteration, but can't. Give up.
+        return; // Need to peel one more iteration, but can't. Give up.
       PeelOneMoreIteration(); // Great!
     }
 
     DesiredPeelCount = std::max(DesiredPeelCount, NewPeelCount);
+  };
+
+  for (BasicBlock *BB : L.blocks()) {
+    for (Instruction &I : *BB) {
+      if (SelectInst *SI = dyn_cast<SelectInst>(&I))
+        ComputePeelCount(SI->getCondition());
+    }
+
+    auto *BI = dyn_cast<BranchInst>(BB->getTerminator());
+    if (!BI || BI->isUnconditional())
+      continue;
+
+    // Ignore loop exit condition.
+    if (L.getLoopLatch() == BB)
+      continue;
+
+    ComputePeelCount(BI->getCondition());
   }
 
   return DesiredPeelCount;
@@ -570,7 +586,7 @@ void llvm::computePeelCount(Loop *L, unsigned LoopSize,
   if (L->getHeader()->getParent()->hasProfileData()) {
     if (violatesLegacyMultiExitLoopCheck(L))
       return;
-    Optional<unsigned> EstimatedTripCount = getLoopEstimatedTripCount(L);
+    std::optional<unsigned> EstimatedTripCount = getLoopEstimatedTripCount(L);
     if (!EstimatedTripCount)
       return;
 
@@ -808,10 +824,12 @@ static void cloneLoopBlocks(
     LVMap[KV.first] = KV.second;
 }
 
-TargetTransformInfo::PeelingPreferences llvm::gatherPeelingPreferences(
-    Loop *L, ScalarEvolution &SE, const TargetTransformInfo &TTI,
-    Optional<bool> UserAllowPeeling,
-    Optional<bool> UserAllowProfileBasedPeeling, bool UnrollingSpecficValues) {
+TargetTransformInfo::PeelingPreferences
+llvm::gatherPeelingPreferences(Loop *L, ScalarEvolution &SE,
+                               const TargetTransformInfo &TTI,
+                               std::optional<bool> UserAllowPeeling,
+                               std::optional<bool> UserAllowProfileBasedPeeling,
+                               bool UnrollingSpecficValues) {
   TargetTransformInfo::PeelingPreferences PP;
 
   // Set the default values.
@@ -853,7 +871,7 @@ TargetTransformInfo::PeelingPreferences llvm::gatherPeelingPreferences(
 /// optimizations.
 bool llvm::peelLoop(Loop *L, unsigned PeelCount, LoopInfo *LI,
                     ScalarEvolution *SE, DominatorTree &DT, AssumptionCache *AC,
-                    bool PreserveLCSSA) {
+                    bool PreserveLCSSA, ValueToValueMapTy &LVMap) {
   assert(PeelCount > 0 && "Attempt to peel out zero iterations?");
   assert(canPeel(L) && "Attempt to peel a loop which is not peelable?");
 
@@ -945,8 +963,6 @@ bool llvm::peelLoop(Loop *L, unsigned PeelCount, LoopInfo *LI,
   InsertBot->setName(Header->getName() + ".peel.next");
   NewPreHeader->setName(PreHeader->getName() + ".peel.newph");
 
-  ValueToValueMapTy LVMap;
-
   Instruction *LatchTerm =
       cast<Instruction>(cast<BasicBlock>(Latch)->getTerminator());
 
@@ -996,9 +1012,8 @@ bool llvm::peelLoop(Loop *L, unsigned PeelCount, LoopInfo *LI,
     InsertBot = SplitBlock(InsertBot, InsertBot->getTerminator(), &DT, LI);
     InsertBot->setName(Header->getName() + ".peel.next");
 
-    F->getBasicBlockList().splice(InsertTop->getIterator(),
-                                  F->getBasicBlockList(),
-                                  NewBlocks[0]->getIterator(), F->end());
+    F->splice(InsertTop->getIterator(), F, NewBlocks[0]->getIterator(),
+              F->end());
   }
 
   // Now adjust the phi nodes in the loop header to get their initial values

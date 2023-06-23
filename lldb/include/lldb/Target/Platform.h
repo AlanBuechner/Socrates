@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -203,9 +204,9 @@ public:
 
   bool SetOSVersion(llvm::VersionTuple os_version);
 
-  llvm::Optional<std::string> GetOSBuildString();
+  std::optional<std::string> GetOSBuildString();
 
-  llvm::Optional<std::string> GetOSKernelDescription();
+  std::optional<std::string> GetOSKernelDescription();
 
   // Returns the name of the platform
   llvm::StringRef GetName() { return GetPluginName(); }
@@ -231,11 +232,11 @@ public:
   // HostInfo::GetOSVersion().
   virtual bool GetRemoteOSVersion() { return false; }
 
-  virtual llvm::Optional<std::string> GetRemoteOSBuildString() {
+  virtual std::optional<std::string> GetRemoteOSBuildString() {
     return std::nullopt;
   }
 
-  virtual llvm::Optional<std::string> GetRemoteOSKernelDescription() {
+  virtual std::optional<std::string> GetRemoteOSKernelDescription() {
     return std::nullopt;
   }
 
@@ -447,13 +448,15 @@ public:
   // Used for column widths
   size_t GetMaxGroupIDNameLength() const { return m_max_gid_name_len; }
 
-  ConstString GetSDKRootDirectory() const { return m_sdk_sysroot; }
+  const std::string &GetSDKRootDirectory() const { return m_sdk_sysroot; }
 
-  void SetSDKRootDirectory(ConstString dir) { m_sdk_sysroot = dir; }
+  void SetSDKRootDirectory(std::string dir) { m_sdk_sysroot = std::move(dir); }
 
-  ConstString GetSDKBuild() const { return m_sdk_build; }
+  const std::string &GetSDKBuild() const { return m_sdk_build; }
 
-  void SetSDKBuild(ConstString sdk_build) { m_sdk_build = sdk_build; }
+  void SetSDKBuild(std::string sdk_build) {
+    m_sdk_build = std::move(sdk_build);
+  }
 
   // Override this to return true if your platform supports Clang modules. You
   // may also need to override AddClangModuleCompilationOptions to pass the
@@ -899,9 +902,9 @@ protected:
   // the once we call HostInfo::GetOSVersion().
   bool m_os_version_set_while_connected;
   bool m_system_arch_set_while_connected;
-  ConstString
+  std::string
       m_sdk_sysroot; // the root location of where the SDK files are all located
-  ConstString m_sdk_build;
+  std::string m_sdk_build;
   FileSpec m_working_dir; // The working directory which is used when installing
                           // modules that have no install path set
   std::string m_remote_url;

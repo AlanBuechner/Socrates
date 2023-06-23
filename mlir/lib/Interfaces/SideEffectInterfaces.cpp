@@ -8,6 +8,7 @@
 
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
 using namespace mlir;
@@ -152,6 +153,8 @@ mlir::hasEffect<MemoryEffects::Write, MemoryEffects::Free>(Operation *, Value);
 bool mlir::wouldOpBeTriviallyDead(Operation *op) {
   if (op->mightHaveTrait<OpTrait::IsTerminator>())
     return false;
+  if (isa<SymbolOpInterface>(op))
+    return false;
   return wouldOpBeTriviallyDeadImpl(op);
 }
 
@@ -201,4 +204,10 @@ bool mlir::isSpeculatable(Operation *op) {
   }
 
   llvm_unreachable("Unhandled enum in mlir::isSpeculatable!");
+}
+
+/// The implementation of this function replicates the `def Pure : TraitList`
+/// in `SideEffectInterfaces.td` and has to be kept in sync manually.
+bool mlir::isPure(Operation *op) {
+  return isSpeculatable(op) && isMemoryEffectFree(op);
 }

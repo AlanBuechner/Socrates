@@ -14,13 +14,16 @@
 #include "clang-include-cleaner/Record.h"
 #include "clang-include-cleaner/Types.h"
 #include "clang/Format/Format.h"
+#include "clang/Lex/HeaderSearch.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/Support/MemoryBufferRef.h"
-#include <variant>
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include <string>
 
 namespace clang {
 class SourceLocation;
+class SourceManager;
 class Decl;
 class FileEntry;
 class HeaderSearch;
@@ -40,6 +43,7 @@ using UsedSymbolCB = llvm::function_ref<void(const SymbolReference &SymRef,
                                              llvm::ArrayRef<Header> Providers)>;
 
 /// Find and report all references to symbols in a region of code.
+/// It only reports references from main file.
 ///
 /// The AST traversal is rooted at ASTRoots - typically top-level declarations
 /// of a single source file.
@@ -64,7 +68,7 @@ struct AnalysisResults {
 AnalysisResults analyze(llvm::ArrayRef<Decl *> ASTRoots,
                         llvm::ArrayRef<SymbolReference> MacroRefs,
                         const Includes &I, const PragmaIncludes *PI,
-                        const SourceManager &SM, HeaderSearch &HS);
+                        const SourceManager &SM, const HeaderSearch &HS);
 
 /// Removes unused includes and inserts missing ones in the main file.
 /// Returns the modified main-file code.
@@ -72,6 +76,12 @@ AnalysisResults analyze(llvm::ArrayRef<Decl *> ASTRoots,
 std::string fixIncludes(const AnalysisResults &Results, llvm::StringRef Code,
                         const format::FormatStyle &IncludeStyle);
 
+/// Gets all the providers for a symbol by traversing each location.
+/// Returned headers are sorted by relevance, first element is the most
+/// likely provider for the symbol.
+llvm::SmallVector<Header> headersForSymbol(const Symbol &S,
+                                           const SourceManager &SM,
+                                           const PragmaIncludes *PI);
 } // namespace include_cleaner
 } // namespace clang
 

@@ -111,32 +111,32 @@ func.func @func_with_ops(f32) {
 // -----
 
 func.func @func_with_ops(%a: f32) {
-  // expected-error@+1 {{'arith.addui_carry' op operand #0 must be signless-integer-like}}
-  %r:2 = arith.addui_carry %a, %a : f32, i32
+  // expected-error@+1 {{'arith.addui_extended' op operand #0 must be signless-integer-like}}
+  %r:2 = arith.addui_extended %a, %a : f32, i32
   return
 }
 
 // -----
 
 func.func @func_with_ops(%a: i32) {
-  // expected-error@+1 {{'arith.addui_carry' op result #1 must be bool-like}}
-  %r:2 = arith.addui_carry %a, %a : i32, i32
+  // expected-error@+1 {{'arith.addui_extended' op result #1 must be bool-like}}
+  %r:2 = arith.addui_extended %a, %a : i32, i32
   return
 }
 
 // -----
 
 func.func @func_with_ops(%a: vector<8xi32>) {
-  // expected-error@+1 {{'arith.addui_carry' op if an operand is non-scalar, then all results must be non-scalar}}
-  %r:2 = arith.addui_carry %a, %a : vector<8xi32>, i1
+  // expected-error@+1 {{'arith.addui_extended' op if an operand is non-scalar, then all results must be non-scalar}}
+  %r:2 = arith.addui_extended %a, %a : vector<8xi32>, i1
   return
 }
 
 // -----
 
 func.func @func_with_ops(%a: vector<8xi32>) {
-  // expected-error@+1 {{'arith.addui_carry' op all non-scalar operands/results must have the same shape and base type}}
-  %r:2 = arith.addui_carry %a, %a : vector<8xi32>, tensor<8xi1>
+  // expected-error@+1 {{'arith.addui_extended' op all non-scalar operands/results must have the same shape and base type}}
+  %r:2 = arith.addui_extended %a, %a : vector<8xi32>, tensor<8xi1>
   return
 }
 
@@ -752,4 +752,20 @@ func.func @func() {
   %c0 = arith.constant  // expected-error {{expected attribute value}}
 
   %x = arith.constant 1 : i32
+}
+
+// -----
+
+func.func @disallow_zero_rank_tensor_with_ranked_tensor(%arg0 : tensor<i1>, %arg1 : tensor<2xi64>, %arg2 : tensor<2xi64>) -> tensor<2xi64> {
+  // expected-error @+1 {{'arith.select' op failed to verify that condition is scalar or has matching shape}}
+  %0 = arith.select %arg0, %arg1, %arg2 : tensor<i1>, tensor<2xi64>
+  return %0 : tensor<2xi64>
+}
+
+// -----
+
+func.func @disallow_zero_rank_tensor_with_unranked_tensor(%arg0 : tensor<i1>, %arg1 : tensor<2x?xi64>, %arg2 : tensor<2x?xi64>) -> tensor<2x?xi64> {
+  // expected-error @+1 {{'arith.select' op failed to verify that condition is scalar or has matching shape}}
+  %0 = arith.select %arg0, %arg1, %arg2 : tensor<i1>, tensor<2x?xi64>
+  return %0 : tensor<2x?xi64>
 }

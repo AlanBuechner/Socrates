@@ -19,7 +19,6 @@
 #include "TargetInfo/PowerPCTargetInfo.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
@@ -44,6 +43,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 
 using namespace llvm;
 
@@ -147,12 +147,11 @@ public:
       MCSymbolXCOFF *TCSym =
           cast<MCSectionXCOFF>(Streamer.getCurrentSectionOnly())
               ->getQualNameSymbol();
-      // If the variant kind is VK_PPC_AIX_TLSGDM the entry represents the
-      // region handle for the symbol, we add the relocation specifier @m.
-      // If the variant kind is VK_PPC_AIX_TLSGD the entry represents the
-      // variable offset for the symbol, we add the relocation specifier @gd.
+      // On AIX, we have a region handle (symbol@m) and the variable offset
+      // (symbol@{gd|le}) for TLS variables, depending on the TLS model.
       if (Kind == MCSymbolRefExpr::VariantKind::VK_PPC_AIX_TLSGD ||
-          Kind == MCSymbolRefExpr::VariantKind::VK_PPC_AIX_TLSGDM)
+          Kind == MCSymbolRefExpr::VariantKind::VK_PPC_AIX_TLSGDM ||
+          Kind == MCSymbolRefExpr::VariantKind::VK_PPC_AIX_TLSLE)
         OS << "\t.tc " << TCSym->getName() << "," << XSym->getName() << "@"
            << MCSymbolRefExpr::getVariantKindName(Kind) << '\n';
       else
@@ -352,6 +351,10 @@ static MCTargetStreamer *createAsmTargetStreamer(MCStreamer &S,
   return new PPCTargetAsmStreamer(S, OS);
 }
 
+static MCTargetStreamer *createNullTargetStreamer(MCStreamer &S) {
+  return new PPCTargetStreamer(S);
+}
+
 static MCTargetStreamer *
 createObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo &STI) {
   const Triple &TT = STI.getTargetTriple();
@@ -381,7 +384,7 @@ public:
                       uint64_t &Target) const override {
     unsigned NumOps = Inst.getNumOperands();
     if (NumOps == 0 ||
-        Info->get(Inst.getOpcode()).OpInfo[NumOps - 1].OperandType !=
+        Info->get(Inst.getOpcode()).operands()[NumOps - 1].OperandType !=
             MCOI::OPERAND_PCREL)
       return false;
     Target = Addr + Inst.getOperand(NumOps - 1).getImm() * Size;
@@ -431,6 +434,9 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializePowerPCTargetMC() {
 
     // Register the asm target streamer.
     TargetRegistry::RegisterAsmTargetStreamer(*T, createAsmTargetStreamer);
+
+    // Register the null target streamer.
+    TargetRegistry::RegisterNullTargetStreamer(*T, createNullTargetStreamer);
 
     // Register the MCInstPrinter.
     TargetRegistry::RegisterMCInstPrinter(*T, createPPCMCInstPrinter);

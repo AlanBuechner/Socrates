@@ -1096,6 +1096,11 @@ enum PredefinedTypeIDs {
 // \brief RISC-V V types with auto numeration
 #define RVV_TYPE(Name, Id, SingletonId) PREDEF_TYPE_##Id##_ID,
 #include "clang/Basic/RISCVVTypes.def"
+// \brief WebAssembly reference types with auto numeration
+#define WASM_TYPE(Name, Id, SingletonId) PREDEF_TYPE_##Id##_ID,
+#include "clang/Basic/WebAssemblyReferenceTypes.def"
+  // Sentinel value. Considered a predefined type but not useable as one.
+  PREDEF_TYPE_LAST_ID
 };
 
 /// The number of predefined type IDs that are reserved for
@@ -1103,7 +1108,13 @@ enum PredefinedTypeIDs {
 ///
 /// Type IDs for non-predefined types will start at
 /// NUM_PREDEF_TYPE_IDs.
-const unsigned NUM_PREDEF_TYPE_IDS = 300;
+const unsigned NUM_PREDEF_TYPE_IDS = 500;
+
+// Ensure we do not overrun the predefined types we reserved
+// in the enum PredefinedTypeIDs above.
+static_assert(PREDEF_TYPE_LAST_ID < NUM_PREDEF_TYPE_IDS,
+              "Too many enumerators in PredefinedTypeIDs. Review the value of "
+              "NUM_PREDEF_TYPE_IDS");
 
 /// Record codes for each kind of type.
 ///
@@ -1860,6 +1871,9 @@ enum StmtCode {
 
   /// A CXXBoolLiteralExpr record.
   EXPR_CXX_BOOL_LITERAL,
+
+  /// A CXXParenListInitExpr record.
+  EXPR_CXX_PAREN_LIST_INIT,
 
   EXPR_CXX_NULL_PTR_LITERAL, // CXXNullPtrLiteralExpr
   EXPR_CXX_TYPEID_EXPR,      // CXXTypeidExpr (of expr).

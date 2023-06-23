@@ -1363,10 +1363,9 @@ Decl *Sema::ActOnPropertyImplDecl(Scope *S,
     if (!Context.hasSameType(PropertyIvarType, IvarType)) {
       if (isa<ObjCObjectPointerType>(PropertyIvarType)
           && isa<ObjCObjectPointerType>(IvarType))
-        compat =
-          Context.canAssignObjCInterfaces(
-                                  PropertyIvarType->getAs<ObjCObjectPointerType>(),
-                                  IvarType->getAs<ObjCObjectPointerType>());
+        compat = Context.canAssignObjCInterfaces(
+            PropertyIvarType->castAs<ObjCObjectPointerType>(),
+            IvarType->castAs<ObjCObjectPointerType>());
       else {
         compat = (CheckAssignmentConstraints(PropertyIvarLoc, PropertyIvarType,
                                              IvarType)
@@ -2508,8 +2507,7 @@ void Sema::ProcessPropertyDecl(ObjCPropertyDecl *property) {
 
     if (const SectionAttr *SA = property->getAttr<SectionAttr>())
       GetterMethod->addAttr(SectionAttr::CreateImplicit(
-          Context, SA->getName(), Loc, AttributeCommonInfo::AS_GNU,
-          SectionAttr::GNU_section));
+          Context, SA->getName(), Loc, SectionAttr::GNU_section));
 
     if (getLangOpts().ObjCAutoRefCount)
       CheckARCMethodDecl(GetterMethod);
@@ -2581,8 +2579,7 @@ void Sema::ProcessPropertyDecl(ObjCPropertyDecl *property) {
       CD->addDecl(SetterMethod);
       if (const SectionAttr *SA = property->getAttr<SectionAttr>())
         SetterMethod->addAttr(SectionAttr::CreateImplicit(
-            Context, SA->getName(), Loc, AttributeCommonInfo::AS_GNU,
-            SectionAttr::GNU_section));
+            Context, SA->getName(), Loc, SectionAttr::GNU_section));
       // It's possible for the user to have set a very odd custom
       // setter selector that causes it to have a method family.
       if (getLangOpts().ObjCAutoRefCount)
@@ -2754,7 +2751,7 @@ void Sema::CheckObjCPropertyAttributes(Decl *PDecl,
 
   if (Attributes & ObjCPropertyAttribute::kind_weak) {
     // 'weak' and 'nonnull' are mutually exclusive.
-    if (auto nullability = PropertyTy->getNullability(Context)) {
+    if (auto nullability = PropertyTy->getNullability()) {
       if (*nullability == NullabilityKind::NonNull)
         Diag(Loc, diag::err_objc_property_attr_mutually_exclusive)
           << "nonnull" << "weak";

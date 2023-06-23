@@ -171,7 +171,7 @@ private:
 
   /// Fixed unique ID assigned to this basic block upon creation. Used with
   /// basic block sections and basic block labels.
-  Optional<unsigned> BBID;
+  std::optional<unsigned> BBID;
 
   /// With basic block sections, this stores the Section ID of the basic block.
   MBBSectionID SectionID{0};
@@ -624,7 +624,7 @@ public:
 
   void setIsEndSection(bool V = true) { IsEndSection = V; }
 
-  Optional<unsigned> getBBID() const { return BBID; }
+  std::optional<unsigned> getBBID() const { return BBID; }
 
   /// Returns the BBID of the block when BBAddrMapVersion >= 2, otherwise
   /// returns `MachineBasicBlock::Number`.
@@ -793,10 +793,15 @@ public:
 
   /// Return the fallthrough block if the block can implicitly
   /// transfer control to the block after it by falling off the end of
-  /// it.  This should return null if it can reach the block after
-  /// it, but it uses an explicit branch to do so (e.g., a table
-  /// jump).  Non-null return  is a conservative answer.
-  MachineBasicBlock *getFallThrough();
+  /// it. If an explicit branch to the fallthrough block is not allowed,
+  /// set JumpToFallThrough to be false. Non-null return is a conservative
+  /// answer.
+  MachineBasicBlock *getFallThrough(bool JumpToFallThrough = true);
+
+  /// Return the fallthrough block if the block can implicitly
+  /// transfer control to it's successor, whether by a branch or
+  /// a fallthrough. Non-null return is a conservative answer.
+  MachineBasicBlock *getLogicalFallThrough() { return getFallThrough(false); }
 
   /// Return true if the block can implicitly transfer control to the
   /// block after it by falling off the end of it.  This should return
@@ -832,6 +837,11 @@ public:
   /// Same getFirstTerminator but it ignores bundles and return an
   /// instr_iterator instead.
   instr_iterator getFirstInstrTerminator();
+
+  /// Finds the first terminator in a block by scanning forward. This can handle
+  /// cases in GlobalISel where there may be non-terminator instructions between
+  /// terminators, for which getFirstTerminator() will not work correctly.
+  iterator getFirstTerminatorForward();
 
   /// Returns an iterator to the first non-debug instruction in the basic block,
   /// or end(). Skip any pseudo probe operation if \c SkipPseudoOp is true.
@@ -1056,31 +1066,33 @@ public:
   /// instead of basic block \p Old.
   void replacePhiUsesWith(MachineBasicBlock *Old, MachineBasicBlock *New);
 
-  /// Find the next valid DebugLoc starting at MBBI, skipping any DBG_VALUE
-  /// and DBG_LABEL instructions.  Return UnknownLoc if there is none.
+  /// Find the next valid DebugLoc starting at MBBI, skipping any debug
+  /// instructions.  Return UnknownLoc if there is none.
   DebugLoc findDebugLoc(instr_iterator MBBI);
   DebugLoc findDebugLoc(iterator MBBI) {
     return findDebugLoc(MBBI.getInstrIterator());
   }
 
-  /// Has exact same behavior as @ref findDebugLoc (it also
-  /// searches from the first to the last MI of this MBB) except
-  /// that this takes reverse iterator.
+  /// Has exact same behavior as @ref findDebugLoc (it also searches towards the
+  /// end of this MBB) except that this function takes a reverse iterator to
+  /// identify the starting MI.
   DebugLoc rfindDebugLoc(reverse_instr_iterator MBBI);
   DebugLoc rfindDebugLoc(reverse_iterator MBBI) {
     return rfindDebugLoc(MBBI.getInstrIterator());
   }
 
-  /// Find the previous valid DebugLoc preceding MBBI, skipping and DBG_VALUE
-  /// instructions.  Return UnknownLoc if there is none.
+  /// Find the previous valid DebugLoc preceding MBBI, skipping any debug
+  /// instructions. It is possible to find the last DebugLoc in the MBB using
+  /// findPrevDebugLoc(instr_end()).  Return UnknownLoc if there is none.
   DebugLoc findPrevDebugLoc(instr_iterator MBBI);
   DebugLoc findPrevDebugLoc(iterator MBBI) {
     return findPrevDebugLoc(MBBI.getInstrIterator());
   }
 
-  /// Has exact same behavior as @ref findPrevDebugLoc (it also
-  /// searches from the last to the first MI of this MBB) except
-  /// that this takes reverse iterator.
+  /// Has exact same behavior as @ref findPrevDebugLoc (it also searches towards
+  /// the beginning of this MBB) except that this function takes reverse
+  /// iterator to identify the starting MI. A minor difference compared to
+  /// findPrevDebugLoc is that we can't start scanning at "instr_end".
   DebugLoc rfindPrevDebugLoc(reverse_instr_iterator MBBI);
   DebugLoc rfindPrevDebugLoc(reverse_iterator MBBI) {
     return rfindPrevDebugLoc(MBBI.getInstrIterator());
@@ -1250,6 +1262,12 @@ template <> struct GraphTraits<Inverse<const MachineBasicBlock*>> {
   static ChildIteratorType child_begin(NodeRef N) { return N->pred_begin(); }
   static ChildIteratorType child_end(NodeRef N) { return N->pred_end(); }
 };
+
+// These accessors are handy for sharing templated code between IR and MIR.
+inline auto successors(const MachineBasicBlock *BB) { return BB->successors(); }
+inline auto predecessors(const MachineBasicBlock *BB) {
+  return BB->predecessors();
+}
 
 /// MachineInstrSpan provides an interface to get an iteration range
 /// containing the instruction it was initialized with, along with all

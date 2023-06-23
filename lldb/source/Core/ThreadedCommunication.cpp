@@ -17,7 +17,6 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Status.h"
 
-#include "llvm/ADT/None.h"
 #include "llvm/Support/Compiler.h"
 
 #include <algorithm>
@@ -58,7 +57,7 @@ ThreadedCommunication::ThreadedCommunication(const char *name)
 ThreadedCommunication::~ThreadedCommunication() {
   LLDB_LOG(GetLog(LLDBLog::Object | LLDBLog::Communication),
            "{0} ThreadedCommunication::~ThreadedCommunication (name = {1})",
-           this, GetBroadcasterName().AsCString());
+           this, GetBroadcasterName());
 }
 
 void ThreadedCommunication::Clear() {

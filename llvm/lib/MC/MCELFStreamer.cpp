@@ -216,6 +216,7 @@ bool MCELFStreamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) {
   case MCSA_Invalid:
   case MCSA_IndirectSymbol:
   case MCSA_Exported:
+  case MCSA_WeakAntiDep:
     return false;
 
   case MCSA_NoDeadStrip:
@@ -310,7 +311,7 @@ bool MCELFStreamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) {
 }
 
 void MCELFStreamer::emitCommonSymbol(MCSymbol *S, uint64_t Size,
-                                     unsigned ByteAlignment) {
+                                     Align ByteAlignment) {
   auto *Symbol = cast<MCSymbolELF>(S);
   getAssembler().registerSymbol(*Symbol);
 
@@ -325,13 +326,13 @@ void MCELFStreamer::emitCommonSymbol(MCSymbol *S, uint64_t Size,
     MCSectionSubPair P = getCurrentSection();
     switchSection(&Section);
 
-    emitValueToAlignment(Align(ByteAlignment), 0, 1, 0);
+    emitValueToAlignment(ByteAlignment, 0, 1, 0);
     emitLabel(Symbol);
     emitZeros(Size);
 
     switchSection(P.first, P.second);
   } else {
-    if(Symbol->declareCommon(Size, ByteAlignment))
+    if (Symbol->declareCommon(Size, ByteAlignment))
       report_fatal_error(Twine("Symbol: ") + Symbol->getName() +
                          " redeclared as different type");
   }
@@ -357,7 +358,7 @@ void MCELFStreamer::emitLocalCommonSymbol(MCSymbol *S, uint64_t Size,
   // FIXME: Should this be caught and done earlier?
   getAssembler().registerSymbol(*Symbol);
   Symbol->setBinding(ELF::STB_LOCAL);
-  emitCommonSymbol(Symbol, Size, ByteAlignment.value());
+  emitCommonSymbol(Symbol, Size, ByteAlignment);
 }
 
 void MCELFStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
@@ -551,8 +552,7 @@ void MCELFStreamer::emitInstToData(const MCInst &Inst,
   MCAssembler &Assembler = getAssembler();
   SmallVector<MCFixup, 4> Fixups;
   SmallString<256> Code;
-  raw_svector_ostream VecOS(Code);
-  Assembler.getEmitter().encodeInstruction(Inst, VecOS, Fixups, STI);
+  Assembler.getEmitter().encodeInstruction(Inst, Code, Fixups, STI);
 
   for (auto &Fixup : Fixups)
     fixSymbolsInTLSFixups(Fixup.getValue());
@@ -733,7 +733,7 @@ void MCELFStreamer::emitZerofill(MCSection *Section, MCSymbol *Symbol,
 }
 
 void MCELFStreamer::emitTBSSSymbol(MCSection *Section, MCSymbol *Symbol,
-                                   uint64_t Size, unsigned ByteAlignment) {
+                                   uint64_t Size, Align ByteAlignment) {
   llvm_unreachable("ELF doesn't support this directive");
 }
 

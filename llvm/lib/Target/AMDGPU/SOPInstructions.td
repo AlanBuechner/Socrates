@@ -865,9 +865,10 @@ def S_CMPK_LE_U32 : SOPK_SCC <"s_cmpk_le_u32", "s_cmp_le_u32", 0>;
 } // End SOPKZext = 1
 } // End isCompare = 1
 
-let Defs = [SCC], isCommutable = 1, DisableEncoding = "$src0",
+let isCommutable = 1, DisableEncoding = "$src0",
     Constraints = "$sdst = $src0" in {
-  def S_ADDK_I32 : SOPK_32TIE <"s_addk_i32">;
+  let Defs = [SCC] in
+    def S_ADDK_I32 : SOPK_32TIE <"s_addk_i32">;
   def S_MULK_I32 : SOPK_32TIE <"s_mulk_i32">;
 }
 
@@ -1174,7 +1175,7 @@ multiclass SOPP_With_Relaxation <string opName, dag ins,
 def S_NOP : SOPP_Pseudo<"s_nop" , (ins i16imm:$simm16), "$simm16">;
 
 let isTerminator = 1 in {
-def S_ENDPGM : SOPP_Pseudo<"s_endpgm", (ins EndpgmImm:$simm16), "$simm16", [], ""> {
+def S_ENDPGM : SOPP_Pseudo<"s_endpgm", (ins Endpgm:$simm16), "$simm16", [], ""> {
   let isBarrier = 1;
   let isReturn = 1;
   let hasSideEffects = 1;

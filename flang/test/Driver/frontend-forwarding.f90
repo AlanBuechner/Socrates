@@ -9,14 +9,16 @@
 ! RUN:     -flarge-sizes \
 ! RUN:     -fconvert=little-endian \
 ! RUN:     -ffp-contract=fast \
-! RUN:     -fno-honor-infinities \
 ! RUN:     -fno-honor-nans \
 ! RUN:     -fapprox-func \
 ! RUN:     -fno-signed-zeros \
 ! RUN:     -fassociative-math \
 ! RUN:     -freciprocal-math \
 ! RUN:     -fpass-plugin=Bye%pluginext \
-! RUN:     -mllvm -print-before-all\
+! RUN:     -fversion-loops-for-stride \
+! RUN:     -flang-experimental-polymorphism \
+! RUN:     -mllvm -print-before-all \
+! RUN:     -save-temps=obj \
 ! RUN:     -P \
 ! RUN:   | FileCheck %s
 
@@ -27,7 +29,6 @@
 ! CHECK: "-fdefault-real-8"
 ! CHECK: "-flarge-sizes"
 ! CHECK: "-ffp-contract=fast"
-! CHECK: "-menable-no-infs"
 ! CHECK: "-menable-no-nans"
 ! CHECK: "-fapprox-func"
 ! CHECK: "-fno-signed-zeros"
@@ -35,4 +36,7 @@
 ! CHECK: "-freciprocal-math"
 ! CHECK: "-fconvert=little-endian"
 ! CHECK: "-fpass-plugin=Bye
+! CHECK: "-flang-experimental-polymorphism"
+! CHECK: "-fversion-loops-for-stride"
 ! CHECK: "-mllvm" "-print-before-all"
+! CHECK: "-save-temps=obj"

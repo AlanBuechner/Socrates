@@ -17,6 +17,9 @@ include "llvm/Target/Target.td"
 def Feature64Bit
     : SubtargetFeature<"64bit", "HasLA64", "true",
                        "LA64 Basic Integer and Privilege Instruction Set">;
+def Feature32Bit
+    : SubtargetFeature<"32bit", "HasLA32", "true",
+                       "LA32 Basic Integer and Privilege Instruction Set">;
 def IsLA64
     : Predicate<"Subtarget->is64Bit()">,
       AssemblerPredicate<(all_of Feature64Bit),
@@ -27,7 +30,7 @@ def IsLA32
                          "LA32 Basic Integer and Privilege Instruction Set">;
 
 defvar LA32 = DefaultMode;
-def LA64 : HwMode<"+64bit">;
+def LA64 : HwMode<"+64bit", [IsLA64]>;
 
 // Single Precision floating point
 def FeatureBasicF
@@ -112,6 +115,11 @@ def HasLaLocalWithAbs
       AssemblerPredicate<(all_of LaLocalWithAbs),
                          "Expand la.local as la.abs">;
 
+// Unaligned memory access
+def FeatureUAL
+    : SubtargetFeature<"ual", "HasUAL", "true",
+                       "Allow memory accesses to be unaligned">;
+
 //===----------------------------------------------------------------------===//
 // Registers, instruction descriptions ...
 //===----------------------------------------------------------------------===//
@@ -124,14 +132,15 @@ include "LoongArchInstrInfo.td"
 // LoongArch processors supported.
 //===----------------------------------------------------------------------===//
 
-def : ProcessorModel<"generic-la32", NoSchedModel, []>;
-def : ProcessorModel<"generic-la64", NoSchedModel, [Feature64Bit]>;
+def : ProcessorModel<"generic-la32", NoSchedModel, [Feature32Bit]>;
+def : ProcessorModel<"generic-la64", NoSchedModel, [Feature64Bit, FeatureUAL]>;
 
 // Support generic for compatibility with other targets. The triple will be used
 // to change to the appropriate la32/la64 version.
 def : ProcessorModel<"generic", NoSchedModel, []>;
 
 def : ProcessorModel<"la464", NoSchedModel, [Feature64Bit,
+                                             FeatureUAL,
                                              FeatureExtLASX,
                                              FeatureExtLVZ,
                                              FeatureExtLBT]>;

@@ -21,7 +21,6 @@
 #include "bolt/RuntimeLibs/RuntimeLibrary.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/BinaryFormat/MachO.h"
@@ -39,9 +38,11 @@
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/RWMutex.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 #include <functional>
 #include <list>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <system_error>
@@ -58,7 +59,6 @@ using namespace object;
 namespace bolt {
 
 class BinaryFunction;
-class ExecutableFileMemoryManager;
 
 /// Information on loadable part of the file.
 struct SegmentInfo {
@@ -152,7 +152,7 @@ class BinaryContext {
   std::string Filename;
 
   /// Unique build ID if available for the binary.
-  Optional<std::string> FileBuildID;
+  std::optional<std::string> FileBuildID;
 
   /// Set of all sections.
   struct CompareSections {
@@ -259,7 +259,7 @@ public:
   void clearFragmentsToSkip() { FragmentsToSkip.clear(); }
 
   /// Given DWOId returns CU if it exists in DWOCUs.
-  Optional<DWARFUnit *> getDWOCU(uint64_t DWOId);
+  std::optional<DWARFUnit *> getDWOCU(uint64_t DWOId);
 
   /// Returns DWOContext if it exists.
   DWARFContext *getDWOContext() const;
@@ -312,14 +312,10 @@ public:
       FilterIterator<binary_data_const_iterator>;
   using FilteredBinaryDataIterator = FilterIterator<binary_data_iterator>;
 
-  /// Memory manager for sections and segments. Used to communicate with ORC
-  /// among other things.
-  std::shared_ptr<ExecutableFileMemoryManager> EFMM;
-
   StringRef getFilename() const { return Filename; }
   void setFilename(StringRef Name) { Filename = std::string(Name); }
 
-  Optional<StringRef> getFileBuildID() const {
+  std::optional<StringRef> getFileBuildID() const {
     if (FileBuildID)
       return StringRef(*FileBuildID);
 
@@ -365,6 +361,13 @@ public:
   BinaryFunction *getBinaryFunctionContainingAddress(uint64_t Address,
                                                      bool CheckPastEnd = false,
                                                      bool UseMaxSize = false);
+  const BinaryFunction *
+  getBinaryFunctionContainingAddress(uint64_t Address,
+                                     bool CheckPastEnd = false,
+                                     bool UseMaxSize = false) const {
+    return const_cast<BinaryContext *>(this)
+        ->getBinaryFunctionContainingAddress(Address, CheckPastEnd, UseMaxSize);
+  }
 
   /// Return a BinaryFunction that starts at a given \p Address.
   BinaryFunction *getBinaryFunctionAtAddress(uint64_t Address);
@@ -503,9 +506,11 @@ public:
   /// Optionally, populate \p Address from jump table entries. The entries
   /// could be partially populated if the jump table detection fails.
   bool analyzeJumpTable(const uint64_t Address,
-                        const JumpTable::JumpTableType Type, BinaryFunction &BF,
+                        const JumpTable::JumpTableType Type,
+                        const BinaryFunction &BF,
                         const uint64_t NextJTAddress = 0,
-                        JumpTable::AddressesType *EntriesAsAddress = nullptr);
+                        JumpTable::AddressesType *EntriesAsAddress = nullptr,
+                        bool *HasEntryInFragment = nullptr) const;
 
   /// After jump table locations are established, this function will populate
   /// their EntriesAsAddress based on memory contents.
@@ -600,6 +605,9 @@ public:
   /// Indicates if the binary is stripped
   bool IsStripped{false};
 
+  /// Indicates if the binary contains split functions.
+  bool HasSplitFunctions{false};
+
   /// Is the binary always loaded at a fixed address. Shared objects and
   /// position-independent executables (PIEs) are examples of binaries that
   /// will have HasFixedLoadAddress set to false.
@@ -650,11 +658,11 @@ public:
 
   /// Address of the code/function that is executed before any other code in
   /// the binary.
-  Optional<uint64_t> StartFunctionAddress;
+  std::optional<uint64_t> StartFunctionAddress;
 
   /// Address of the code/function that is going to be executed right before
   /// the execution of the binary is completed.
-  Optional<uint64_t> FiniFunctionAddress;
+  std::optional<uint64_t> FiniFunctionAddress;
 
   /// Page alignment used for code layout.
   uint64_t PageAlign{HugePageSize};
@@ -713,6 +721,8 @@ public:
     return TheTriple->getArch() == llvm::Triple::x86 ||
            TheTriple->getArch() == llvm::Triple::x86_64;
   }
+
+  bool isRISCV() const { return TheTriple->getArch() == llvm::Triple::riscv64; }
 
   // AArch64-specific functions to check if symbol is used to delimit
   // code/data in .text. Code is marked by $x, data by $d.
@@ -832,13 +842,11 @@ public:
   /// Return BinaryData for the given \p Name or nullptr if no
   /// global symbol with that name exists.
   const BinaryData *getBinaryDataByName(StringRef Name) const {
-    auto Itr = GlobalSymbols.find(Name);
-    return Itr != GlobalSymbols.end() ? Itr->second : nullptr;
+    return GlobalSymbols.lookup(Name);
   }
 
   BinaryData *getBinaryDataByName(StringRef Name) {
-    auto Itr = GlobalSymbols.find(Name);
-    return Itr != GlobalSymbols.end() ? Itr->second : nullptr;
+    return GlobalSymbols.lookup(Name);
   }
 
   /// Return registered PLT entry BinaryData with the given \p Name
@@ -1063,9 +1071,9 @@ public:
   /// segments was mapped. \p FileOffset is the offset in the file of the
   /// mapping. Note that \p FileOffset should be page-aligned and could be
   /// different from the file offset of the segment which could be unaligned.
-  /// If no segment is found that matches \p FileOffset, return NoneType().
-  Optional<uint64_t> getBaseAddressForMapping(uint64_t MMapAddress,
-                                              uint64_t FileOffset) const;
+  /// If no segment is found that matches \p FileOffset, return std::nullopt.
+  std::optional<uint64_t> getBaseAddressForMapping(uint64_t MMapAddress,
+                                                   uint64_t FileOffset) const;
 
   /// Check if the address belongs to this binary's static allocation space.
   bool containsAddress(uint64_t Address) const {
@@ -1139,7 +1147,7 @@ public:
 
   /// Return a relocation registered at a given \p Address, or nullptr if there
   /// is no relocation at such address.
-  const Relocation *getRelocationAt(uint64_t Address);
+  const Relocation *getRelocationAt(uint64_t Address) const;
 
   /// Register a presence of PC-relative relocation at the given \p Address.
   void addPCRelativeDataRelocation(uint64_t Address) {
@@ -1152,7 +1160,7 @@ public:
 
   /// Return a dynamic relocation registered at a given \p Address, or nullptr
   /// if there is no dynamic relocation at such address.
-  const Relocation *getDynamicRelocationAt(uint64_t Address);
+  const Relocation *getDynamicRelocationAt(uint64_t Address) const;
 
   /// Remove registered relocation at a given \p Address.
   bool removeRelocationAt(uint64_t Address);
@@ -1214,8 +1222,7 @@ public:
       Emitter = this->MCE.get();
     SmallString<256> Code;
     SmallVector<MCFixup, 4> Fixups;
-    raw_svector_ostream VecOS(Code);
-    Emitter->encodeInstruction(Inst, VecOS, Fixups, *STI);
+    Emitter->encodeInstruction(Inst, Code, Fixups, *STI);
     return Code.size();
   }
 

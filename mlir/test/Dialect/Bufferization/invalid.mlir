@@ -58,7 +58,7 @@ func.func @escape_attr_non_bufferizable(%m0: memref<?xf32>) {
 
 // -----
 
-#DCSR = #sparse_tensor.encoding<{ dimLevelType = [ "compressed", "compressed" ] }>
+#DCSR = #sparse_tensor.encoding<{ lvlTypes = [ "compressed", "compressed" ] }>
 
 func.func @sparse_alloc_direct_return() -> tensor<20x40xf32, #DCSR> {
   // expected-error @+1{{sparse tensor allocation should not escape function}}
@@ -68,7 +68,7 @@ func.func @sparse_alloc_direct_return() -> tensor<20x40xf32, #DCSR> {
 
 // -----
 
-#DCSR = #sparse_tensor.encoding<{ dimLevelType = [ "compressed", "compressed" ] }>
+#DCSR = #sparse_tensor.encoding<{ lvlTypes = [ "compressed", "compressed" ] }>
 
 func.func private @foo(tensor<20x40xf32, #DCSR>) -> ()
 
@@ -77,4 +77,21 @@ func.func @sparse_alloc_call() {
   %0 = bufferization.alloc_tensor() : tensor<20x40xf32, #DCSR>
   call @foo(%0) : (tensor<20x40xf32, #DCSR>) -> ()
   return
+}
+
+// -----
+
+// expected-error @+1{{invalid value for 'bufferization.access'}}
+func.func private @invalid_buffer_access_type(tensor<*xf32> {bufferization.access = "foo"})
+
+// -----
+
+// expected-error @+1{{'bufferization.writable' is invalid on external functions}}
+func.func private @invalid_writable_attribute(tensor<*xf32> {bufferization.writable = false})
+
+// -----
+
+func.func @invalid_writable_on_op() {
+  // expected-error @+1{{attribute '"bufferization.writable"' not supported as an op attribute by the bufferization dialect}}
+  arith.constant {bufferization.writable = true} 0  : index
 }

@@ -89,6 +89,14 @@ public:
   using reverse_iterator = InstListType::reverse_iterator;
   using const_reverse_iterator = InstListType::const_reverse_iterator;
 
+  // These functions and classes need access to the instruction list.
+  friend void Instruction::removeFromParent();
+  friend iplist<Instruction>::iterator Instruction::eraseFromParent();
+  friend BasicBlock::iterator Instruction::insertInto(BasicBlock *BB,
+                                                      BasicBlock::iterator It);
+  friend class llvm::SymbolTableListTraits<llvm::Instruction>;
+  friend class llvm::ilist_node_with_parent<llvm::Instruction, llvm::BasicBlock>;
+
   /// Creates a new BasicBlock.
   ///
   /// If the Parent parameter is specified, the basic block is automatically
@@ -205,6 +213,15 @@ public:
         .getNonConst();
   }
 
+  /// Returns the first potential AsynchEH faulty instruction
+  /// currently it checks for loads/stores (which may dereference a null
+  /// pointer) and calls/invokes (which may propagate exceptions)
+  const Instruction* getFirstMayFaultInst() const;
+  Instruction* getFirstMayFaultInst() {
+      return const_cast<Instruction*>(
+          static_cast<const BasicBlock*>(this)->getFirstMayFaultInst());
+  }
+
   /// Return a const iterator range over the instructions in the block, skipping
   /// any debug instructions. Skip any pseudo operations as well if \c
   /// SkipPseudoOp is true.
@@ -234,7 +251,10 @@ public:
 
   /// Unlink this basic block from its current function and insert it into
   /// the function that \p MovePos lives in, right before \p MovePos.
-  void moveBefore(BasicBlock *MovePos);
+  inline void moveBefore(BasicBlock *MovePos) {
+    moveBefore(MovePos->getIterator());
+  }
+  void moveBefore(SymbolTableList<BasicBlock>::iterator MovePos);
 
   /// Unlink this basic block from its current function and insert it
   /// right after \p MovePos in the function \p MovePos lives in.
@@ -366,18 +386,21 @@ public:
   }
   iterator_range<phi_iterator> phis();
 
+private:
   /// Return the underlying instruction list container.
-  ///
-  /// Currently you need to access the underlying instruction list container
-  /// directly if you want to modify it.
+  /// This is deliberately private because we have implemented an adequate set
+  /// of functions to modify the list, including BasicBlock::splice(),
+  /// BasicBlock::erase(), Instruction::insertInto() etc.
   const InstListType &getInstList() const { return InstList; }
-        InstListType &getInstList()       { return InstList; }
+  InstListType &getInstList() { return InstList; }
 
   /// Returns a pointer to a member of the instruction list.
-  static InstListType BasicBlock::*getSublistAccess(Instruction*) {
+  /// This is private on purpose, just like `getInstList()`.
+  static InstListType BasicBlock::*getSublistAccess(Instruction *) {
     return &BasicBlock::InstList;
   }
 
+public:
   /// Returns a pointer to the symbol table if one exists.
   ValueSymbolTable *getValueSymbolTable();
 
