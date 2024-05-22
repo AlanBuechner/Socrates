@@ -1,8 +1,0 @@
-﻿  CodeGen.cpp
-  ReflectionData.cpp
-  Source.cpp
-  Utils.cpp
-  Validate.cpp
-LINK : warning LNK4199: /DELAYLOAD:shell32.dll ignored; no imports found from shell32.dll
-LINK : warning LNK4199: /DELAYLOAD:ole32.dll ignored; no imports found from ole32.dll
-  Socrates.vcxproj -> C:\Users\abuechner\source\repos\Socrates\build\Release\bin\Socrates.exe

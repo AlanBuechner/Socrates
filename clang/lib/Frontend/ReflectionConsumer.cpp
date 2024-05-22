@@ -3,6 +3,7 @@
 #include "clang/AST/DeclGroup.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
+#include "clang/AST/QualTypeNames.h"
 #include "llvm/Support/FileSystem.h"
 #include <iostream>
 
@@ -45,8 +46,26 @@ void ReflectedClass::Generate(ASTContext *ctx, raw_ostream &os) {
   for (const auto &field : m_record->fields()) {
     std::string attrs = GetAnnotations(field->getAttrs());
     if (StringRef(attrs).starts_with("reflect-property")) {
-      std::string t = field->getType()->getAsCXXRecordDecl()->getQualifiedNameAsString();
-      os << "\tprop<" << t << ";" << field->getName() << ">" << attrs << "\n";
+      //std::string t = field->getType()->getAsCXXRecordDecl()->getQualifiedNameAsString();
+      QualType type = field->getType().getDesugaredType((const ASTContext &)*ctx);
+      PrintingPolicy policy(ctx->getPrintingPolicy());
+      policy.SuppressScope = false;
+      policy.AnonymousTagLocations = false;
+      policy.FullyQualifiedName = true;
+      policy.SuppressTagKeyword = false;
+      std::string name = TypeName::getFullyQualifiedName(
+        type, (const ASTContext &)*ctx, policy, false
+      );
+
+      os << "\tprop<" << name << ";" << field->getName() << ">" << attrs << "\n";
+    }
+  }
+
+  for (const auto& func : m_record->methods()){
+    std::string attrs = GetAnnotations(func->getAttrs());
+    if (StringRef(attrs).startswith("reflect-function")) {
+      std::string name = func->getNameAsString();
+      os << "\tfunc<" << name << ">" << attrs << "\n";
     }
   }
   

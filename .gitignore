@@ -72,3 +72,4 @@ pythonenv*
 /lldb/docs/python_api/
 
 Reflection/x64/
+Socrates/x64/
