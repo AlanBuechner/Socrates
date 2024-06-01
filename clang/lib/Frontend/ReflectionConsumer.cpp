@@ -33,6 +33,17 @@ std::string GetAnnotations(const AttrVec &attrs) {
   return attributes;
 }
 
+std::string getTypeAsString(QualType type, ASTContext* ctx)
+{
+  PrintingPolicy policy(ctx->getPrintingPolicy());
+  policy.SuppressScope = false;
+  policy.AnonymousTagLocations = false;
+  policy.FullyQualifiedName = true;
+  policy.SuppressTagKeyword = false;
+  return TypeName::getFullyQualifiedName(
+      type, (const ASTContext &)*ctx, policy, false);
+}
+
 
 // ---------------- Reflected Class ---------------- //
 ReflectedClass::ReflectedClass(CXXRecordDecl const *rec, const std::string& attrs) : m_record(rec), m_attrs(attrs) {}
@@ -46,16 +57,8 @@ void ReflectedClass::Generate(ASTContext *ctx, raw_ostream &os) {
   for (const auto &field : m_record->fields()) {
     std::string attrs = GetAnnotations(field->getAttrs());
     if (StringRef(attrs).starts_with("reflect-property")) {
-      //std::string t = field->getType()->getAsCXXRecordDecl()->getQualifiedNameAsString();
       QualType type = field->getType().getDesugaredType((const ASTContext &)*ctx);
-      PrintingPolicy policy(ctx->getPrintingPolicy());
-      policy.SuppressScope = false;
-      policy.AnonymousTagLocations = false;
-      policy.FullyQualifiedName = true;
-      policy.SuppressTagKeyword = false;
-      std::string name = TypeName::getFullyQualifiedName(
-        type, (const ASTContext &)*ctx, policy, false
-      );
+      std::string name = getTypeAsString(type, ctx);
 
       os << "\tprop<" << name << ";" << field->getName() << ">" << attrs << "\n";
     }
@@ -65,7 +68,14 @@ void ReflectedClass::Generate(ASTContext *ctx, raw_ostream &os) {
     std::string attrs = GetAnnotations(func->getAttrs());
     if (StringRef(attrs).startswith("reflect-function")) {
       std::string name = func->getNameAsString();
-      os << "\tfunc<" << name << ">" << attrs << "\n";
+      os << "\tfunc<" << name;
+      for (int i = 0; i < func->getNumParams(); i++)
+      {
+        QualType type = func->getParamDecl(i)->getType().getDesugaredType((const ASTContext&)*ctx).getNonReferenceType();
+        std::string typeName = getTypeAsString(type, ctx);
+        os << ";" << typeName;
+      }
+      os << ">" << attrs << "\n";
     }
   }
   
