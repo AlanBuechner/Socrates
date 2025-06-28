@@ -59,7 +59,7 @@ mlir::affine::createPipelineDataTransferPass() {
 
 // Returns the position of the tag memref operand given a DMA operation.
 // Temporary utility: will be replaced when DmaStart/DmaFinish abstract op's are
-// added.  TODO
+// added.
 static unsigned getTagMemRefPos(Operation &dmaOp) {
   assert((isa<AffineDmaStartOp, AffineDmaWaitOp>(dmaOp)));
   if (auto dmaStartOp = dyn_cast<AffineDmaStartOp>(dmaOp)) {
@@ -107,7 +107,7 @@ static bool doubleBuffer(Value oldMemRef, AffineForOp forOp) {
 
   // Create 'iv mod 2' value to index the leading dimension.
   auto d0 = bInner.getAffineDimExpr(0);
-  int64_t step = forOp.getStep();
+  int64_t step = forOp.getStepAsInt();
   auto modTwoMap =
       AffineMap::get(/*dimCount=*/1, /*symbolCount=*/0, d0.floorDiv(step) % 2);
   auto ivModTwoOp = bInner.create<AffineApplyOp>(forOp.getLoc(), modTwoMap,
@@ -115,13 +115,16 @@ static bool doubleBuffer(Value oldMemRef, AffineForOp forOp) {
 
   // replaceAllMemRefUsesWith will succeed unless the forOp body has
   // non-dereferencing uses of the memref (dealloc's are fine though).
-  if (failed(replaceAllMemRefUsesWith(
-          oldMemRef, newMemRef,
-          /*extraIndices=*/{ivModTwoOp},
-          /*indexRemap=*/AffineMap(),
-          /*extraOperands=*/{},
-          /*symbolOperands=*/{},
-          /*domOpFilter=*/&*forOp.getBody()->begin()))) {
+  auto userFilterFn = [&](Operation *user) {
+    auto domInfo = std::make_unique<DominanceInfo>(
+        forOp->getParentOfType<FunctionOpInterface>());
+    return domInfo->dominates(&*forOp.getBody()->begin(), user);
+  };
+  if (failed(replaceAllMemRefUsesWith(oldMemRef, newMemRef,
+                                      /*extraIndices=*/{ivModTwoOp},
+                                      /*indexRemap=*/AffineMap(),
+                                      /*extraOperands=*/{},
+                                      /*symbolOperands=*/{}, userFilterFn))) {
     LLVM_DEBUG(
         forOp.emitError("memref replacement for double buffering failed"));
     ivModTwoOp.erase();
@@ -350,8 +353,7 @@ void PipelineDataTransfer::runOnAffineForOp(AffineForOp forOp) {
   }
   // Everything else (including compute ops and dma finish) are shifted by one.
   for (auto &op : forOp.getBody()->without_terminator())
-    if (!instShiftMap.contains(&op))
-      instShiftMap[&op] = 1;
+    instShiftMap.try_emplace(&op, 1);
 
   // Get shifts stored in map.
   SmallVector<uint64_t, 8> shifts(forOp.getBody()->getOperations().size());

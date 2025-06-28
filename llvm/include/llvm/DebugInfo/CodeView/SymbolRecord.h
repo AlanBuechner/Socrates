@@ -19,6 +19,7 @@
 #include "llvm/DebugInfo/CodeView/RecordSerialization.h"
 #include "llvm/DebugInfo/CodeView/TypeIndex.h"
 #include "llvm/Support/BinaryStreamArray.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Endian.h"
 #include <cstdint>
 #include <vector>
@@ -144,6 +145,27 @@ public:
   uint32_t RecordOffset = 0;
 };
 
+class JumpTableSym : public SymbolRecord {
+public:
+  explicit JumpTableSym(SymbolRecordKind Kind) : SymbolRecord(Kind) {}
+  JumpTableSym(uint32_t RecordOffset)
+      : SymbolRecord(SymbolRecordKind::JumpTableSym),
+        RecordOffset(RecordOffset) {}
+
+  uint32_t BaseOffset = 0;
+  uint16_t BaseSegment = 0;
+
+  JumpTableEntrySize SwitchType;
+  uint32_t BranchOffset = 0;
+  uint32_t TableOffset = 0;
+  uint16_t BranchSegment = 0;
+  uint16_t TableSegment = 0;
+
+  uint32_t EntriesCount = 0;
+
+  uint32_t RecordOffset = 0;
+};
+
 class CallerSym : public SymbolRecord {
 public:
   explicit CallerSym(SymbolRecordKind Kind) : SymbolRecord(Kind) {}
@@ -151,6 +173,21 @@ public:
       : SymbolRecord(Kind), RecordOffset(RecordOffset) {}
 
   std::vector<TypeIndex> Indices;
+
+  uint32_t RecordOffset = 0;
+};
+
+class HotPatchFuncSym : public SymbolRecord {
+public:
+  explicit HotPatchFuncSym(SymbolRecordKind Kind) : SymbolRecord(Kind) {}
+  HotPatchFuncSym(uint32_t RecordOffset)
+      : SymbolRecord(SymbolRecordKind::HotPatchFuncSym),
+        RecordOffset(RecordOffset) {}
+
+  // This is an ItemID in the IPI stream, which points to an LF_FUNC_ID or
+  // LF_MFUNC_ID record.
+  TypeIndex Function;
+  StringRef Name;
 
   uint32_t RecordOffset = 0;
 };
@@ -1002,8 +1039,8 @@ public:
   uint32_t RecordOffset = 0;
 };
 
-Expected<CVSymbol> readSymbolFromStream(BinaryStreamRef Stream,
-                                        uint32_t Offset);
+LLVM_ABI Expected<CVSymbol> readSymbolFromStream(BinaryStreamRef Stream,
+                                                 uint32_t Offset);
 
 } // end namespace codeview
 } // end namespace llvm

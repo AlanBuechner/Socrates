@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "LanaiISelLowering.h"
-#include "Lanai.h"
 #include "LanaiCondCode.h"
 #include "LanaiMachineFunctionInfo.h"
 #include "LanaiSubtarget.h"
@@ -27,12 +26,11 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/MachineValueType.h"
-#include "llvm/CodeGen/RuntimeLibcalls.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/TargetCallingConv.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/CodeGenTypes/MachineValueType.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
@@ -153,9 +151,8 @@ LanaiTargetLowering::LanaiTargetLowering(const TargetMachine &TM,
   setMinimumJumpTableEntries(100);
 
   // Use fast calling convention for library functions.
-  for (int I = 0; I < RTLIB::UNKNOWN_LIBCALL; ++I) {
-    setLibcallCallingConv(static_cast<RTLIB::Libcall>(I), CallingConv::Fast);
-  }
+  for (RTLIB::Libcall LC : RTLIB::libcalls())
+    setLibcallCallingConv(LC, CallingConv::Fast);
 
   MaxStoresPerMemset = 16; // For @llvm.memset -> sequence of stores
   MaxStoresPerMemsetOptSize = 8;
@@ -166,6 +163,8 @@ LanaiTargetLowering::LanaiTargetLowering(const TargetMachine &TM,
 
   // Booleans always contain 0 or 1.
   setBooleanContents(ZeroOrOneBooleanContent);
+
+  setMaxAtomicSizeInBitsSupported(0);
 }
 
 SDValue LanaiTargetLowering::LowerOperation(SDValue Op,
@@ -212,7 +211,7 @@ Register LanaiTargetLowering::getRegisterByName(
   const char *RegName, LLT /*VT*/,
   const MachineFunction & /*MF*/) const {
   // Only unallocatable registers should be matched here.
-  Register Reg = StringSwitch<unsigned>(RegName)
+  Register Reg = StringSwitch<Register>(RegName)
                      .Case("pc", Lanai::PC)
                      .Case("sp", Lanai::SP)
                      .Case("fp", Lanai::FP)
@@ -221,11 +220,8 @@ Register LanaiTargetLowering::getRegisterByName(
                      .Case("rr2", Lanai::RR2)
                      .Case("r11", Lanai::R11)
                      .Case("rca", Lanai::RCA)
-                     .Default(0);
-
-  if (Reg)
-    return Reg;
-  report_fatal_error("Invalid register name global variable");
+                     .Default(Register());
+  return Reg;
 }
 
 std::pair<unsigned, const TargetRegisterClass *>
@@ -278,12 +274,12 @@ LanaiTargetLowering::getSingleConstraintMatchWeight(
 // LowerAsmOperandForConstraint - Lower the specified operand into the Ops
 // vector.  If it is invalid, don't add anything to Ops.
 void LanaiTargetLowering::LowerAsmOperandForConstraint(
-    SDValue Op, std::string &Constraint, std::vector<SDValue> &Ops,
+    SDValue Op, StringRef Constraint, std::vector<SDValue> &Ops,
     SelectionDAG &DAG) const {
   SDValue Result;
 
   // Only support length 1 constraints for now.
-  if (Constraint.length() > 1)
+  if (Constraint.size() > 1)
     return;
 
   char ConstraintLetter = Constraint[0];
@@ -449,8 +445,7 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
     CCInfo.AnalyzeFormalArguments(Ins, CC_Lanai32);
   }
 
-  for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
-    CCValAssign &VA = ArgLocs[i];
+  for (const CCValAssign &VA : ArgLocs) {
     if (VA.isRegLoc()) {
       // Arguments passed in registers
       EVT RegVT = VA.getLocVT();
@@ -528,7 +523,8 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
 
 bool LanaiTargetLowering::CanLowerReturn(
     CallingConv::ID CallConv, MachineFunction &MF, bool IsVarArg,
-    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context) const {
+    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context,
+    const Type *RetTy) const {
   SmallVector<CCValAssign, 16> RVLocs;
   CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
 
@@ -647,7 +643,7 @@ SDValue LanaiTargetLowering::LowerCCCCallTo(
     Chain = DAG.getMemcpy(Chain, DL, FIPtr, Arg, SizeNode, Alignment,
                           /*IsVolatile=*/false,
                           /*AlwaysInline=*/false,
-                          /*isTailCall=*/false, MachinePointerInfo(),
+                          /*CI=*/nullptr, std::nullopt, MachinePointerInfo(),
                           MachinePointerInfo());
     ByValArgs.push_back(FIPtr);
   }
@@ -874,8 +870,7 @@ SDValue LanaiTargetLowering::LowerBR_CC(SDValue Op, SelectionDAG &DAG) const {
 
   LPCC::CondCode CC = IntCondCCodeToICC(Cond, DL, RHS, DAG);
   SDValue TargetCC = DAG.getConstant(CC, DL, MVT::i32);
-  SDValue Glue =
-      DAG.getNode(LanaiISD::SET_FLAG, DL, MVT::Glue, LHS, RHS, TargetCC);
+  SDValue Glue = DAG.getNode(LanaiISD::SET_FLAG, DL, MVT::Glue, LHS, RHS);
 
   return DAG.getNode(LanaiISD::BR_CC, DL, Op.getValueType(), Chain, Dest,
                      TargetCC, Glue);
@@ -974,8 +969,7 @@ SDValue LanaiTargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
 
   LPCC::CondCode CC = IntCondCCodeToICC(Cond, DL, RHS, DAG);
   SDValue TargetCC = DAG.getConstant(CC, DL, MVT::i32);
-  SDValue Glue =
-      DAG.getNode(LanaiISD::SET_FLAG, DL, MVT::Glue, LHS, RHS, TargetCC);
+  SDValue Glue = DAG.getNode(LanaiISD::SET_FLAG, DL, MVT::Glue, LHS, RHS);
 
   return DAG.getNode(LanaiISD::SETCC, DL, Op.getValueType(), TargetCC, Glue);
 }
@@ -991,12 +985,10 @@ SDValue LanaiTargetLowering::LowerSELECT_CC(SDValue Op,
 
   LPCC::CondCode CC = IntCondCCodeToICC(Cond, DL, RHS, DAG);
   SDValue TargetCC = DAG.getConstant(CC, DL, MVT::i32);
-  SDValue Glue =
-      DAG.getNode(LanaiISD::SET_FLAG, DL, MVT::Glue, LHS, RHS, TargetCC);
+  SDValue Glue = DAG.getNode(LanaiISD::SET_FLAG, DL, MVT::Glue, LHS, RHS);
 
-  SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Glue);
-  return DAG.getNode(LanaiISD::SELECT_CC, DL, VTs, TrueV, FalseV, TargetCC,
-                     Glue);
+  return DAG.getNode(LanaiISD::SELECT_CC, DL, Op.getValueType(), TrueV, FalseV,
+                     TargetCC, Glue);
 }
 
 SDValue LanaiTargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
@@ -1057,7 +1049,7 @@ SDValue LanaiTargetLowering::LowerRETURNADDR(SDValue Op,
 
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
-  unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+  unsigned Depth = Op.getConstantOperandVal(0);
   if (Depth) {
     SDValue FrameAddr = LowerFRAMEADDR(Op, DAG);
     const unsigned Offset = -4;
@@ -1080,7 +1072,7 @@ SDValue LanaiTargetLowering::LowerFRAMEADDR(SDValue Op,
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
   SDValue FrameAddr = DAG.getCopyFromReg(DAG.getEntryNode(), DL, Lanai::FP, VT);
-  unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+  unsigned Depth = Op.getConstantOperandVal(0);
   while (Depth--) {
     const unsigned Offset = -8;
     SDValue Ptr = DAG.getNode(ISD::ADD, DL, VT, FrameAddr,
@@ -1089,37 +1081,6 @@ SDValue LanaiTargetLowering::LowerFRAMEADDR(SDValue Op,
         DAG.getLoad(VT, DL, DAG.getEntryNode(), Ptr, MachinePointerInfo());
   }
   return FrameAddr;
-}
-
-const char *LanaiTargetLowering::getTargetNodeName(unsigned Opcode) const {
-  switch (Opcode) {
-  case LanaiISD::ADJDYNALLOC:
-    return "LanaiISD::ADJDYNALLOC";
-  case LanaiISD::RET_GLUE:
-    return "LanaiISD::RET_GLUE";
-  case LanaiISD::CALL:
-    return "LanaiISD::CALL";
-  case LanaiISD::SELECT_CC:
-    return "LanaiISD::SELECT_CC";
-  case LanaiISD::SETCC:
-    return "LanaiISD::SETCC";
-  case LanaiISD::SUBBF:
-    return "LanaiISD::SUBBF";
-  case LanaiISD::SET_FLAG:
-    return "LanaiISD::SET_FLAG";
-  case LanaiISD::BR_CC:
-    return "LanaiISD::BR_CC";
-  case LanaiISD::Wrapper:
-    return "LanaiISD::Wrapper";
-  case LanaiISD::HI:
-    return "LanaiISD::HI";
-  case LanaiISD::LO:
-    return "LanaiISD::LO";
-  case LanaiISD::SMALL:
-    return "LanaiISD::SMALL";
-  default:
-    return nullptr;
-  }
 }
 
 SDValue LanaiTargetLowering::LowerConstantPool(SDValue Op,

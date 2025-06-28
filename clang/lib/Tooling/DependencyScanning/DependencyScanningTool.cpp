@@ -34,16 +34,12 @@ public:
     Dependencies.push_back(std::string(File));
   }
 
-  void handlePrebuiltModuleDependency(PrebuiltModuleDep PMD) override {
-    // Same as `handleModuleDependency`.
-  }
-
-  void handleModuleDependency(ModuleDeps MD) override {
-    // These are ignored for the make format as it can't support the full
-    // set of deps, and handleFileDependency handles enough for implicitly
-    // built modules to work.
-  }
-
+  // These are ignored for the make format as it can't support the full
+  // set of deps, and handleFileDependency handles enough for implicitly
+  // built modules to work.
+  void handlePrebuiltModuleDependency(PrebuiltModuleDep PMD) override {}
+  void handleModuleDependency(ModuleDeps MD) override {}
+  void handleDirectModuleDependency(ModuleID ID) override {}
   void handleContextHash(std::string Hash) override {}
 
   void printDependencies(std::string &S) {
@@ -122,7 +118,7 @@ llvm::Expected<P1689Rule> DependencyScanningTool::getP1689ModuleDependencyFile(
   class P1689ActionController : public DependencyActionController {
   public:
     // The lookupModuleOutput is for clang modules. P1689 format don't need it.
-    std::string lookupModuleOutput(const ModuleID &,
+    std::string lookupModuleOutput(const ModuleDeps &,
                                    ModuleOutputKind Kind) override {
       return "";
     }
@@ -145,12 +141,14 @@ llvm::Expected<P1689Rule> DependencyScanningTool::getP1689ModuleDependencyFile(
 llvm::Expected<TranslationUnitDeps>
 DependencyScanningTool::getTranslationUnitDependencies(
     const std::vector<std::string> &CommandLine, StringRef CWD,
-    const llvm::StringSet<> &AlreadySeen,
-    LookupModuleOutputCallback LookupModuleOutput) {
+    const llvm::DenseSet<ModuleID> &AlreadySeen,
+    LookupModuleOutputCallback LookupModuleOutput,
+    std::optional<llvm::MemoryBufferRef> TUBuffer) {
   FullDependencyConsumer Consumer(AlreadySeen);
   CallbackActionController Controller(LookupModuleOutput);
-  llvm::Error Result =
-      Worker.computeDependencies(CWD, CommandLine, Consumer, Controller);
+  llvm::Error Result = Worker.computeDependencies(CWD, CommandLine, Consumer,
+                                                  Controller, TUBuffer);
+
   if (Result)
     return std::move(Result);
   return Consumer.takeTranslationUnitDeps();
@@ -158,7 +156,7 @@ DependencyScanningTool::getTranslationUnitDependencies(
 
 llvm::Expected<ModuleDepsGraph> DependencyScanningTool::getModuleDependencies(
     StringRef ModuleName, const std::vector<std::string> &CommandLine,
-    StringRef CWD, const llvm::StringSet<> &AlreadySeen,
+    StringRef CWD, const llvm::DenseSet<ModuleID> &AlreadySeen,
     LookupModuleOutputCallback LookupModuleOutput) {
   FullDependencyConsumer Consumer(AlreadySeen);
   CallbackActionController Controller(LookupModuleOutput);
@@ -173,20 +171,21 @@ TranslationUnitDeps FullDependencyConsumer::takeTranslationUnitDeps() {
   TranslationUnitDeps TU;
 
   TU.ID.ContextHash = std::move(ContextHash);
+  TU.ID.ModuleName = std::move(ModuleName);
+  TU.NamedModuleDeps = std::move(NamedModuleDeps);
   TU.FileDeps = std::move(Dependencies);
   TU.PrebuiltModuleDeps = std::move(PrebuiltModuleDeps);
   TU.Commands = std::move(Commands);
 
   for (auto &&M : ClangModuleDeps) {
     auto &MD = M.second;
-    if (MD.ImportedByMainFile)
-      TU.ClangModuleDeps.push_back(MD.ID);
     // TODO: Avoid handleModuleDependency even being called for modules
     //   we've already seen.
     if (AlreadySeen.count(M.first))
       continue;
     TU.ModuleGraph.push_back(std::move(MD));
   }
+  TU.ClangModuleDeps = std::move(DirectModuleDeps);
 
   return TU;
 }

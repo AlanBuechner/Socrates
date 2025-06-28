@@ -16,7 +16,6 @@
 #include "llvm/Support/Error.h"
 #include <map>
 #include <utility>
-#include <vector>
 
 namespace clang {
 namespace tooling {

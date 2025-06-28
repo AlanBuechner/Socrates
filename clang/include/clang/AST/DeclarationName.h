@@ -362,7 +362,8 @@ public:
   }
 
   /// Construct a declaration name from an Objective-C selector.
-  DeclarationName(Selector Sel) : Ptr(Sel.InfoPtr) {}
+  DeclarationName(Selector Sel)
+      : Ptr(reinterpret_cast<uintptr_t>(Sel.InfoPtr.getOpaqueValue())) {}
 
   /// Returns the name for all C++ using-directives.
   static DeclarationName getUsingDirectiveName() {
@@ -474,6 +475,34 @@ public:
       return castAsCXXOperatorIdName()->Kind;
     }
     return OO_None;
+  }
+
+  bool isAnyOperatorNew() const {
+    if (getNameKind() != DeclarationName::CXXOperatorName)
+      return false;
+    switch (getCXXOverloadedOperator()) {
+    case OO_New:
+    case OO_Array_New:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  bool isAnyOperatorDelete() const {
+    if (getNameKind() != DeclarationName::CXXOperatorName)
+      return false;
+    switch (getCXXOverloadedOperator()) {
+    case OO_Delete:
+    case OO_Array_Delete:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  bool isAnyOperatorNewOrDelete() const {
+    return isAnyOperatorNew() || isAnyOperatorDelete();
   }
 
   /// If this name is the name of a literal operator,

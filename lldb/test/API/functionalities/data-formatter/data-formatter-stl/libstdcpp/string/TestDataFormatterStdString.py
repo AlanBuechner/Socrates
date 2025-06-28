@@ -44,7 +44,6 @@ class StdStringDataFormatterTestCase(TestBase):
             self.runCmd("type summary clear", check=False)
             self.runCmd("type filter clear", check=False)
             self.runCmd("type synth clear", check=False)
-            self.runCmd("settings set target.max-children-count 256", check=False)
 
         # Execute the cleanup function during test case tear down.
         self.addTearDownHook(cleanup)
@@ -61,8 +60,6 @@ class StdStringDataFormatterTestCase(TestBase):
         var_pq = self.frame().FindVariable("pq")
         var_pQ = self.frame().FindVariable("pQ")
 
-        var_uchar = self.frame().FindVariable("uchar")
-
         self.assertEqual(var_wempty.GetSummary(), 'L""', "wempty summary wrong")
         self.assertEqual(
             var_s.GetSummary(), 'L"hello world! מזל טוב!"', "s summary wrong"
@@ -78,7 +75,6 @@ class StdStringDataFormatterTestCase(TestBase):
             '"quite a long std::strin with lots of info inside it"',
             "Q summary wrong",
         )
-        self.assertEqual(var_uchar.GetSummary(), '"aaaaa"', "u summary wrong")
         self.assertEqual(var_rq.GetSummary(), '"hello world"', "rq summary wrong")
         self.assertEqual(
             var_rQ.GetSummary(),

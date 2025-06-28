@@ -10,8 +10,10 @@
 
 #include "lldb/Expression/FunctionCaller.h"
 #include "lldb/Target/ABI.h"
+#include "lldb/Target/Language.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/lldb-enumerations.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -392,7 +394,7 @@ bool ClassDescriptorV2::relative_list_entry_t::Read(Process *process,
   lldb::offset_t cursor = 0;
   uint64_t raw_entry = extractor.GetU64_unchecked(&cursor);
   m_image_index = raw_entry & 0xFFFF;
-  m_list_offset = (int64_t)(raw_entry >> 16);
+  m_list_offset = llvm::SignExtend64<48>(raw_entry >> 16);
   return true;
 }
 
@@ -550,9 +552,8 @@ bool ClassDescriptorV2::Describe(
     } else {
       std::optional<method_list_t> base_method_list =
           GetMethodList(process, class_ro->m_baseMethods_ptr);
-      if (!base_method_list)
-        return false;
-      if (!ProcessMethodList(instance_method_func, *base_method_list))
+      if (base_method_list &&
+          !ProcessMethodList(instance_method_func, *base_method_list))
         return false;
     }
   }
@@ -668,6 +669,19 @@ uint64_t ClassDescriptorV2::GetInstanceSize() {
   return 0;
 }
 
+// From the ObjC runtime.
+static uint8_t IS_SWIFT_STABLE = 1U << 1;
+
+LanguageType ClassDescriptorV2::GetImplementationLanguage() const {
+  std::unique_ptr<objc_class_t> objc_class;
+  if (auto *process = m_runtime.GetProcess())
+    if (Read_objc_class(process, objc_class))
+      if (objc_class->m_flags & IS_SWIFT_STABLE)
+        return lldb::eLanguageTypeSwift;
+
+  return lldb::eLanguageTypeObjC;
+}
+
 ClassDescriptorV2::iVarsStorage::iVarsStorage() : m_ivars(), m_mutex() {}
 
 size_t ClassDescriptorV2::iVarsStorage::size() { return m_ivars.size(); }
@@ -707,7 +721,7 @@ void ClassDescriptorV2::iVarsStorage::fill(AppleObjCRuntimeV2 &runtime,
                 "name = {0}, encoding = {1}, offset_ptr = {2:x}, size = "
                 "{3}, type_size = {4}",
                 name, type, offset_ptr, size,
-                ivar_type.GetByteSize(nullptr).value_or(0));
+                expectedToOptional(ivar_type.GetByteSize(nullptr)).value_or(0));
       Scalar offset_scalar;
       Status error;
       const int offset_ptr_size = 4;

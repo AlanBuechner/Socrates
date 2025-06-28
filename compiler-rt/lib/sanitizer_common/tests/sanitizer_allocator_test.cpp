@@ -28,12 +28,13 @@
 
 using namespace __sanitizer;
 
-#if SANITIZER_SOLARIS && defined(__sparcv9)
+#if defined(__sparcv9)
 // FIXME: These tests probably fail because Solaris/sparcv9 uses the full
-// 64-bit address space.  Needs more investigation
-#define SKIP_ON_SOLARIS_SPARCV9(x) DISABLED_##x
+// 64-bit address space.  Same on Linux/sparc64, so probably a general SPARC
+// issue.  Needs more investigation
+#  define SKIP_ON_SPARCV9(x) DISABLED_##x
 #else
-#define SKIP_ON_SOLARIS_SPARCV9(x) x
+#  define SKIP_ON_SPARCV9(x) x
 #endif
 
 // On 64-bit systems with small virtual address spaces (e.g. 39-bit) we can't
@@ -69,12 +70,17 @@ const uptr kAllocatorSpace = ~(uptr)0;
 const uptr kAllocatorSize = 0x2000000000ULL;  // 128G.
 static const u64 kAddressSpaceSize = 1ULL << 38;
 typedef VeryDenseSizeClassMap SizeClassMap;
-#else
+#    elif SANITIZER_APPLE
 static const uptr kAllocatorSpace = 0x700000000000ULL;
 static const uptr kAllocatorSize  = 0x010000000000ULL;  // 1T.
 static const u64 kAddressSpaceSize = 1ULL << 47;
 typedef DefaultSizeClassMap SizeClassMap;
-#endif
+#    else
+static const uptr kAllocatorSpace = 0x500000000000ULL;
+static const uptr kAllocatorSize = 0x010000000000ULL;  // 1T.
+static const u64 kAddressSpaceSize = 1ULL << 47;
+typedef DefaultSizeClassMap SizeClassMap;
+#    endif
 
 template <typename AddressSpaceViewTy>
 struct AP64 {  // Allocator Params. Short name for shorter demangled names..
@@ -776,7 +782,7 @@ TEST(SanitizerCommon, CombinedAllocator64VeryCompact) {
 }
 #endif
 
-TEST(SanitizerCommon, SKIP_ON_SOLARIS_SPARCV9(CombinedAllocator32Compact)) {
+TEST(SanitizerCommon, SKIP_ON_SPARCV9(CombinedAllocator32Compact)) {
   TestCombinedAllocator<Allocator32Compact>();
 }
 
@@ -1023,7 +1029,7 @@ TEST(SanitizerCommon, SizeClassAllocator64DynamicPremappedIteration) {
 #endif
 #endif
 
-TEST(SanitizerCommon, SKIP_ON_SOLARIS_SPARCV9(SizeClassAllocator32Iteration)) {
+TEST(SanitizerCommon, SKIP_ON_SPARCV9(SizeClassAllocator32Iteration)) {
   TestSizeClassAllocatorIteration<Allocator32Compact>();
 }
 
@@ -1094,7 +1100,7 @@ TEST(SanitizerCommon, LargeMmapAllocatorBlockBegin) {
 
 // Don't test OOM conditions on Win64 because it causes other tests on the same
 // machine to OOM.
-#if SANITIZER_CAN_USE_ALLOCATOR64 && !SANITIZER_WINDOWS64
+#if SANITIZER_CAN_USE_ALLOCATOR64 && !SANITIZER_WINDOWS64 && !ALLOCATOR64_SMALL_SIZE
 typedef __sanitizer::SizeClassMap<2, 22, 22, 34, 128, 16> SpecialSizeClassMap;
 template <typename AddressSpaceViewTy = LocalAddressSpaceView>
 struct AP64_SpecialSizeClassMap {
@@ -1122,7 +1128,7 @@ TEST(SanitizerCommon, SizeClassAllocator64PopulateFreeListOOM) {
   // ...one man is on a mission to overflow a region with a series of
   // successive allocations.
 
-  const uptr kClassID = ALLOCATOR64_SMALL_SIZE ? 18 : 24;
+  const uptr kClassID = 24;
   const uptr kAllocationSize = SpecialSizeClassMap::Size(kClassID);
   ASSERT_LT(2 * kAllocationSize, kRegionSize);
   ASSERT_GT(3 * kAllocationSize, kRegionSize);
@@ -1130,7 +1136,7 @@ TEST(SanitizerCommon, SizeClassAllocator64PopulateFreeListOOM) {
   EXPECT_NE(cache.Allocate(a, kClassID), nullptr);
   EXPECT_EQ(cache.Allocate(a, kClassID), nullptr);
 
-  const uptr Class2 = ALLOCATOR64_SMALL_SIZE ? 15 : 21;
+  const uptr Class2 = 21;
   const uptr Size2 = SpecialSizeClassMap::Size(Class2);
   ASSERT_EQ(Size2 * 8, kRegionSize);
   char *p[7];

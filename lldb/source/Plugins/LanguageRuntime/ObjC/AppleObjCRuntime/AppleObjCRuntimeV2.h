@@ -20,6 +20,7 @@
 #include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
 
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/SmallSet.h"
 
 class RemoteNXMapTable;
 
@@ -38,6 +39,8 @@ public:
 
   static llvm::StringRef GetPluginNameStatic() { return "apple-objc-v2"; }
 
+  LanguageRuntime *GetPreferredLanguageRuntime(ValueObject &in_value) override;
+
   static char ID;
 
   bool isA(const void *ClassID) const override {
@@ -51,8 +54,8 @@ public:
   bool GetDynamicTypeAndAddress(ValueObject &in_value,
                                 lldb::DynamicValueType use_dynamic,
                                 TypeAndOrName &class_type_or_name,
-                                Address &address,
-                                Value::ValueType &value_type) override;
+                                Address &address, Value::ValueType &value_type,
+                                llvm::ArrayRef<uint8_t> &local_buffer) override;
 
   llvm::Expected<std::unique_ptr<UtilityFunction>>
   CreateObjectChecker(std::string name, ExecutionContext &exe_ctx) override;
@@ -63,12 +66,12 @@ public:
     return ObjCRuntimeVersions::eAppleObjC_V2;
   }
 
-  size_t GetByteOffsetForIvar(CompilerType &parent_qual_type,
+  size_t GetByteOffsetForIvar(CompilerType &parent_ast_type,
                               const char *ivar_name) override;
 
   void UpdateISAToDescriptorMapIfNeeded() override;
 
-  ClassDescriptorSP GetClassDescriptor(ValueObject &in_value) override;
+  ClassDescriptorSP GetClassDescriptor(ValueObject &valobj) override;
 
   ClassDescriptorSP GetClassDescriptorFromISA(ObjCISA isa) override;
 
@@ -103,6 +106,8 @@ public:
   bool IsSharedCacheImageLoaded(uint16_t image_index);
 
   std::optional<uint64_t> GetSharedCacheImageHeaderVersion();
+
+  StructuredData::ObjectSP GetLanguageSpecificData(SymbolContext sc) override;
 
 protected:
   lldb::BreakpointResolverSP
@@ -416,6 +421,10 @@ private:
   ObjCISA GetPointerISA(ObjCISA isa);
 
   lldb::addr_t GetISAHashTablePointer();
+
+  using ValueObjectSet = llvm::SmallPtrSet<ValueObject *, 8>;
+  ClassDescriptorSP GetClassDescriptorImpl(ValueObject &valobj,
+                                           ValueObjectSet &seen);
 
   /// Update the generation count of realized classes. This is not an exact
   /// count but rather a value that is incremented when new classes are realized

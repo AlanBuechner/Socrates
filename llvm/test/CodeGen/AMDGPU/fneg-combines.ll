@@ -1,8 +1,8 @@
-; RUN: llc -march=amdgcn -mcpu=hawaii -start-before=amdgpu-unify-divergent-exit-nodes -mattr=+flat-for-global < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-SAFE,SI %s
-; RUN: llc -enable-no-signed-zeros-fp-math -march=amdgcn -mcpu=hawaii -mattr=+flat-for-global -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-NSZ,SI %s
+; RUN: llc -mtriple=amdgcn -mcpu=hawaii -start-before=amdgpu-unify-divergent-exit-nodes -mattr=+flat-for-global < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-SAFE,SI %s
+; RUN: llc -enable-no-signed-zeros-fp-math -mtriple=amdgcn -mcpu=hawaii -mattr=+flat-for-global -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-NSZ,SI %s
 
-; RUN: llc -march=amdgcn -mcpu=fiji -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-SAFE,VI %s
-; RUN: llc -enable-no-signed-zeros-fp-math -march=amdgcn -mcpu=fiji -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-NSZ,VI %s
+; RUN: llc -mtriple=amdgcn -mcpu=fiji -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-SAFE,VI %s
+; RUN: llc -enable-no-signed-zeros-fp-math -mtriple=amdgcn -mcpu=fiji -start-before=amdgpu-unify-divergent-exit-nodes < %s | FileCheck -enable-var-scope --check-prefixes=GCN,GCN-NSZ,VI %s
 
 ; --------------------------------------------------------------------------------
 ; fadd tests
@@ -853,7 +853,7 @@ define amdgpu_ps <2 x float> @v_fneg_minnum_multi_use_minnum_f32_no_ieee(float %
   %min = call float @llvm.minnum.f32(float %a, float %b)
   %fneg = fneg float %min
   %use1 = fmul float %min, 4.0
-  %ins0 = insertelement <2 x float> undef, float %fneg, i32 0
+  %ins0 = insertelement <2 x float> poison, float %fneg, i32 0
   %ins1 = insertelement <2 x float> %ins0, float %use1, i32 1
   ret <2 x float> %ins1
 }
@@ -1093,7 +1093,7 @@ define amdgpu_ps <2 x float> @v_fneg_maxnum_multi_use_maxnum_f32_no_ieee(float %
   %max = call float @llvm.maxnum.f32(float %a, float %b)
   %fneg = fneg float %max
   %use1 = fmul float %max, 4.0
-  %ins0 = insertelement <2 x float> undef, float %fneg, i32 0
+  %ins0 = insertelement <2 x float> poison, float %fneg, i32 0
   %ins1 = insertelement <2 x float> %ins0, float %use1, i32 1
   ret <2 x float> %ins1
 }
@@ -1538,7 +1538,7 @@ define amdgpu_kernel void @v_fneg_fp_extend_store_use_fneg_f32_to_f64(ptr addrsp
   %fpext = fpext float %fneg.a to double
   %fneg = fsub double -0.000000e+00, %fpext
   store volatile double %fneg, ptr addrspace(1) %out.gep
-  store volatile float %fneg.a, ptr addrspace(1) undef
+  store volatile float %fneg.a, ptr addrspace(1) poison
   ret void
 }
 
@@ -1557,7 +1557,7 @@ define amdgpu_kernel void @v_fneg_multi_use_fp_extend_fneg_f32_to_f64(ptr addrsp
   %fpext = fpext float %a to double
   %fneg = fsub double -0.000000e+00, %fpext
   store volatile double %fneg, ptr addrspace(1) %out.gep
-  store volatile double %fpext, ptr addrspace(1) undef
+  store volatile double %fpext, ptr addrspace(1) poison
   ret void
 }
 
@@ -1665,7 +1665,7 @@ define amdgpu_kernel void @v_fneg_fp_round_store_use_fneg_f64_to_f32(ptr addrspa
   %fpround = fptrunc double %fneg.a to float
   %fneg = fneg float %fpround
   store volatile float %fneg, ptr addrspace(1) %out.gep
-  store volatile double %fneg.a, ptr addrspace(1) undef
+  store volatile double %fneg.a, ptr addrspace(1) poison
   ret void
 }
 
@@ -1687,7 +1687,7 @@ define amdgpu_kernel void @v_fneg_fp_round_multi_use_fneg_f64_to_f32(ptr addrspa
   %fneg = fneg float %fpround
   %use1 = fmul double %fneg.a, %c
   store volatile float %fneg, ptr addrspace(1) %out.gep
-  store volatile double %use1, ptr addrspace(1) undef
+  store volatile double %use1, ptr addrspace(1) poison
   ret void
 }
 
@@ -1759,7 +1759,7 @@ define amdgpu_kernel void @v_fneg_fp_round_store_use_fneg_f32_to_f16(ptr addrspa
   %fpround = fptrunc float %fneg.a to half
   %fneg = fsub half -0.000000e+00, %fpround
   store volatile half %fneg, ptr addrspace(1) %out.gep
-  store volatile float %fneg.a, ptr addrspace(1) undef
+  store volatile float %fneg.a, ptr addrspace(1) poison
   ret void
 }
 
@@ -1780,7 +1780,7 @@ define amdgpu_kernel void @v_fneg_fp_round_multi_use_fneg_f32_to_f16(ptr addrspa
   %fneg = fsub half -0.000000e+00, %fpround
   %use1 = fmul float %fneg.a, %c
   store volatile half %fneg, ptr addrspace(1) %out.gep
-  store volatile float %use1, ptr addrspace(1) undef
+  store volatile float %use1, ptr addrspace(1) poison
   ret void
 }
 
@@ -1837,7 +1837,7 @@ define amdgpu_kernel void @v_fneg_rcp_store_use_fneg_f32(ptr addrspace(1) %out, 
   %rcp = call float @llvm.amdgcn.rcp.f32(float %fneg.a)
   %fneg = fneg float %rcp
   store volatile float %fneg, ptr addrspace(1) %out.gep
-  store volatile float %fneg.a, ptr addrspace(1) undef
+  store volatile float %fneg.a, ptr addrspace(1) poison
   ret void
 }
 
@@ -1858,7 +1858,7 @@ define amdgpu_kernel void @v_fneg_rcp_multi_use_fneg_f32(ptr addrspace(1) %out, 
   %fneg = fneg float %rcp
   %use1 = fmul float %fneg.a, %c
   store volatile float %fneg, ptr addrspace(1) %out.gep
-  store volatile float %use1, ptr addrspace(1) undef
+  store volatile float %use1, ptr addrspace(1) poison
   ret void
 }
 
@@ -2608,10 +2608,9 @@ bb:
 }
 
 ; This expects denormal flushing, so can't turn this fmul into fneg
-; TODO: Keeping this as fmul saves encoding size
 ; GCN-LABEL: {{^}}nnan_fmul_neg1_to_fneg:
-; GCN: v_sub_f32_e32 [[TMP:v[0-9]+]], 0x80000000, v0
-; GCN-NEXT: v_mul_f32_e32 v0, [[TMP]], v1
+; GCN: s_waitcnt
+; GCN-NEXT: v_mul_f32_e64 v0, -v0, v1
 define float @nnan_fmul_neg1_to_fneg(float %x, float %y) #0 {
   %mul = fmul float %x, -1.0
   %add = fmul nnan float %mul, %y
@@ -2631,8 +2630,9 @@ define float @denormal_fmul_neg1_to_fneg(float %x, float %y) {
 
 ; know the source can't be an snan
 ; GCN-LABEL: {{^}}denorm_snan_fmul_neg1_to_fneg:
-; GCN: v_mul_f32_e64 [[TMP:v[0-9]+]], v0, -v0
-; GCN: v_mul_f32_e32 v0, [[TMP]], v1
+; GCN: s_waitcnt
+; GCN-NEXT: v_mul_f32_e64 [[TMP:v[0-9]+]], v0, -v0
+; GCN-NEXT: v_mul_f32_e32 v0, [[TMP]], v1
 ; GCN-NEXT: s_setpc_b64
 define float @denorm_snan_fmul_neg1_to_fneg(float %x, float %y) {
   %canonical = fmul float %x, %x
@@ -2642,9 +2642,9 @@ define float @denorm_snan_fmul_neg1_to_fneg(float %x, float %y) {
 }
 
 ; GCN-LABEL: {{^}}flush_snan_fmul_neg1_to_fneg:
-; GCN: v_mul_f32_e32 [[TMP0:v[0-9]+]], 1.0, v0
-; GCN: v_sub_f32_e32 [[TMP1:v[0-9]+]], 0x80000000, [[TMP0]]
-; GCN-NEXT: v_mul_f32_e32 v0, [[TMP1]], v1
+; GCN: s_waitcnt
+; GCN-NEXT: v_mul_f32_e32 [[TMP:v[0-9]+]], 1.0, v0
+; GCN-NEXT: v_mul_f32_e64 v0, -[[TMP]], v1
 define float @flush_snan_fmul_neg1_to_fneg(float %x, float %y) #0 {
   %quiet = call float @llvm.canonicalize.f32(float %x)
   %mul = fmul float %quiet, -1.0

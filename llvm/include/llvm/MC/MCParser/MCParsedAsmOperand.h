@@ -10,18 +10,20 @@
 #define LLVM_MC_MCPARSER_MCPARSEDASMOPERAND_H
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/SMLoc.h"
 #include <string>
 
 namespace llvm {
 
+class MCRegister;
 class raw_ostream;
 
 /// MCParsedAsmOperand - This abstract class represents a source-level assembly
 /// instruction operand.  It should be subclassed by target-specific code.  This
 /// base class is used by target-independent clients and is the interface
 /// between parsing an asm instruction and recognizing it.
-class MCParsedAsmOperand {
+class LLVM_ABI MCParsedAsmOperand {
   /// MCOperandNum - The corresponding MCInst operand number.  Only valid when
   /// parsing MS-style inline assembly.
   unsigned MCOperandNum = ~0u;
@@ -57,7 +59,7 @@ public:
   virtual bool isImm() const = 0;
   /// isReg - Is this a register operand?
   virtual bool isReg() const = 0;
-  virtual unsigned getReg() const = 0;
+  virtual MCRegister getReg() const = 0;
 
   /// isMem - Is this a memory operand?
   virtual bool isMem() const = 0;
@@ -92,15 +94,6 @@ public:
   /// dump - Print to the debug stream.
   virtual void dump() const;
 };
-
-//===----------------------------------------------------------------------===//
-// Debugging Support
-
-inline raw_ostream& operator<<(raw_ostream &OS, const MCParsedAsmOperand &MO) {
-  MO.print(OS);
-  return OS;
-}
-
 } // end namespace llvm
 
 #endif // LLVM_MC_MCPARSER_MCPARSEDASMOPERAND_H

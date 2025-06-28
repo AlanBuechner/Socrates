@@ -47,64 +47,6 @@
 // back on at the end of the file.
 #pragma GCC diagnostic ignored "-Wformat"
 #pragma GCC diagnostic ignored "-Wformat-extra-args"
-
-#if !defined(__MINGW64_VERSION_MAJOR)
-// MinGW.org does not have updated support for the 64-bit versions of the
-// DebugHlp APIs. So we will have to load them manually. The structures and
-// method signatures were pulled from DbgHelp.h in the Windows Platform SDK,
-// and adjusted for brevity.
-typedef struct _IMAGEHLP_LINE64 {
-  DWORD SizeOfStruct;
-  PVOID Key;
-  DWORD LineNumber;
-  PCHAR FileName;
-  DWORD64 Address;
-} IMAGEHLP_LINE64, *PIMAGEHLP_LINE64;
-
-typedef struct _IMAGEHLP_SYMBOL64 {
-  DWORD SizeOfStruct;
-  DWORD64 Address;
-  DWORD Size;
-  DWORD Flags;
-  DWORD MaxNameLength;
-  CHAR Name[1];
-} IMAGEHLP_SYMBOL64, *PIMAGEHLP_SYMBOL64;
-
-typedef struct _tagADDRESS64 {
-  DWORD64 Offset;
-  WORD Segment;
-  ADDRESS_MODE Mode;
-} ADDRESS64, *LPADDRESS64;
-
-typedef struct _KDHELP64 {
-  DWORD64 Thread;
-  DWORD ThCallbackStack;
-  DWORD ThCallbackBStore;
-  DWORD NextCallback;
-  DWORD FramePointer;
-  DWORD64 KiCallUserMode;
-  DWORD64 KeUserCallbackDispatcher;
-  DWORD64 SystemRangeStart;
-  DWORD64 KiUserExceptionDispatcher;
-  DWORD64 StackBase;
-  DWORD64 StackLimit;
-  DWORD64 Reserved[5];
-} KDHELP64, *PKDHELP64;
-
-typedef struct _tagSTACKFRAME64 {
-  ADDRESS64 AddrPC;
-  ADDRESS64 AddrReturn;
-  ADDRESS64 AddrFrame;
-  ADDRESS64 AddrStack;
-  ADDRESS64 AddrBStore;
-  PVOID FuncTableEntry;
-  DWORD64 Params[4];
-  BOOL Far;
-  BOOL Virtual;
-  DWORD64 Reserved[3];
-  KDHELP64 KdHelp;
-} STACKFRAME64, *LPSTACKFRAME64;
-#endif // !defined(__MINGW64_VERSION_MAJOR)
 #endif // __MINGW32__
 
 typedef BOOL(__stdcall *PREAD_PROCESS_MEMORY_ROUTINE64)(
@@ -168,25 +110,30 @@ static bool isDebugHelpInitialized() {
 }
 
 static bool load64BitDebugHelp(void) {
-  HMODULE hLib = ::LoadLibraryW(L"Dbghelp.dll");
+  HMODULE hLib =
+      ::LoadLibraryExA("Dbghelp.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
   if (hLib) {
-    fMiniDumpWriteDump =
-        (fpMiniDumpWriteDump)::GetProcAddress(hLib, "MiniDumpWriteDump");
-    fStackWalk64 = (fpStackWalk64)::GetProcAddress(hLib, "StackWalk64");
-    fSymGetModuleBase64 =
-        (fpSymGetModuleBase64)::GetProcAddress(hLib, "SymGetModuleBase64");
-    fSymGetSymFromAddr64 =
-        (fpSymGetSymFromAddr64)::GetProcAddress(hLib, "SymGetSymFromAddr64");
-    fSymGetLineFromAddr64 =
-        (fpSymGetLineFromAddr64)::GetProcAddress(hLib, "SymGetLineFromAddr64");
-    fSymGetModuleInfo64 =
-        (fpSymGetModuleInfo64)::GetProcAddress(hLib, "SymGetModuleInfo64");
-    fSymFunctionTableAccess64 = (fpSymFunctionTableAccess64)::GetProcAddress(
-        hLib, "SymFunctionTableAccess64");
-    fSymSetOptions = (fpSymSetOptions)::GetProcAddress(hLib, "SymSetOptions");
-    fSymInitialize = (fpSymInitialize)::GetProcAddress(hLib, "SymInitialize");
-    fEnumerateLoadedModules = (fpEnumerateLoadedModules)::GetProcAddress(
-        hLib, "EnumerateLoadedModules64");
+    fMiniDumpWriteDump = (fpMiniDumpWriteDump)(void *)::GetProcAddress(
+        hLib, "MiniDumpWriteDump");
+    fStackWalk64 = (fpStackWalk64)(void *)::GetProcAddress(hLib, "StackWalk64");
+    fSymGetModuleBase64 = (fpSymGetModuleBase64)(void *)::GetProcAddress(
+        hLib, "SymGetModuleBase64");
+    fSymGetSymFromAddr64 = (fpSymGetSymFromAddr64)(void *)::GetProcAddress(
+        hLib, "SymGetSymFromAddr64");
+    fSymGetLineFromAddr64 = (fpSymGetLineFromAddr64)(void *)::GetProcAddress(
+        hLib, "SymGetLineFromAddr64");
+    fSymGetModuleInfo64 = (fpSymGetModuleInfo64)(void *)::GetProcAddress(
+        hLib, "SymGetModuleInfo64");
+    fSymFunctionTableAccess64 =
+        (fpSymFunctionTableAccess64)(void *)::GetProcAddress(
+            hLib, "SymFunctionTableAccess64");
+    fSymSetOptions =
+        (fpSymSetOptions)(void *)::GetProcAddress(hLib, "SymSetOptions");
+    fSymInitialize =
+        (fpSymInitialize)(void *)::GetProcAddress(hLib, "SymInitialize");
+    fEnumerateLoadedModules =
+        (fpEnumerateLoadedModules)(void *)::GetProcAddress(
+            hLib, "EnumerateLoadedModules64");
   }
   return isDebugHelpInitialized();
 }
@@ -300,6 +247,11 @@ static bool findModulesAndOffsets(void **StackTrace, int Depth,
   Data.StrPool = &StrPool;
   fEnumerateLoadedModules(GetCurrentProcess(), findModuleCallback, &Data);
   return true;
+}
+
+static bool printMarkupContext(llvm::raw_ostream &OS,
+                               const char *MainExecutableName) {
+  return false;
 }
 
 static void PrintStackTraceForThread(llvm::raw_ostream &OS, HANDLE hProcess,
@@ -525,12 +477,6 @@ void sys::PrintStackTraceOnErrorSignal(StringRef Argv0,
   LeaveCriticalSection(&CriticalSection);
 }
 } // namespace llvm
-
-#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
-// Provide a prototype for RtlCaptureContext, mingw32 from mingw.org is
-// missing it but mingw-w64 has it.
-extern "C" VOID WINAPI RtlCaptureContext(PCONTEXT ContextRecord);
-#endif
 
 static void LocalPrintStackTrace(raw_ostream &OS, PCONTEXT C) {
   STACKFRAME64 StackFrame{};

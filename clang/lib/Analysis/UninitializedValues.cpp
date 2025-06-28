@@ -20,7 +20,6 @@
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/Type.h"
-#include "clang/Analysis/Analyses/PostOrderCFGView.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Analysis/DomainSpecific/ObjCNoReturn.h"
@@ -31,7 +30,6 @@
 #include "llvm/ADT/PackedVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Casting.h"
 #include <algorithm>
 #include <cassert>
 #include <optional>
@@ -44,7 +42,7 @@ static bool recordIsNotEmpty(const RecordDecl *RD) {
   // We consider a record decl to be empty if it contains only unnamed bit-
   // fields, zero-width fields, and fields of empty record type.
   for (const auto *FD : RD->fields()) {
-    if (FD->isUnnamedBitfield())
+    if (FD->isUnnamedBitField())
       continue;
     if (FD->isZeroSize(FD->getASTContext()))
       continue;
@@ -64,7 +62,7 @@ static bool isTrackedVar(const VarDecl *vd, const DeclContext *dc) {
     QualType ty = vd->getType();
     if (const auto *RD = ty->getAsRecordDecl())
       return recordIsNotEmpty(RD);
-    return ty->isScalarType() || ty->isVectorType() || ty->isRVVType();
+    return ty->isScalarType() || ty->isVectorType() || ty->isRVVSizelessBuiltinType();
   }
   return false;
 }
@@ -379,8 +377,10 @@ void ClassifyRefs::classify(const Expr *E, Class C) {
   }
 
   FindVarResult Var = findVar(E, DC);
-  if (const DeclRefExpr *DRE = Var.getDeclRefExpr())
-    Classification[DRE] = std::max(Classification[DRE], C);
+  if (const DeclRefExpr *DRE = Var.getDeclRefExpr()) {
+    auto &Class = Classification[DRE];
+    Class = std::max(Class, C);
+  }
 }
 
 void ClassifyRefs::VisitDeclStmt(DeclStmt *DS) {
@@ -896,7 +896,7 @@ struct PruneBlocksHandler : public UninitVariablesHandler {
     hadUse[currentBlock] = true;
     hadAnyUse = true;
   }
-  
+
   /// Called when the uninitialized variable analysis detects the
   /// idiom 'int x = x'.  All other uses of 'x' within the initializer
   /// are handled by handleUseOfUninitVariable.

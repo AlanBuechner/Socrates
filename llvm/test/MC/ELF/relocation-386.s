@@ -1,5 +1,6 @@
-// RUN: llvm-mc -filetype=obj -triple i386-pc-linux-gnu %s -relax-relocations=false -o - | llvm-readobj -r  - | FileCheck  %s --check-prefix=CHECK --check-prefix=I386
-// RUN: llvm-mc -filetype=obj -triple i386-pc-elfiamcu %s -relax-relocations=false  -o - | llvm-readobj -r  - | FileCheck  %s --check-prefix=CHECK --check-prefix=IAMCU
+// RUN: llvm-mc -filetype=obj -triple i386-pc-linux-gnu %s -x86-relax-relocations=false -o - | llvm-readobj -r  - | FileCheck  %s --check-prefix=CHECK --check-prefix=I386
+// RUN: llvm-mc -filetype=obj -triple i386-pc-elfiamcu %s -x86-relax-relocations=false  -o - | llvm-readobj -r  - | FileCheck  %s --check-prefix=CHECK --check-prefix=IAMCU
+// RUN: not llvm-mc -filetype=obj -triple=i686 --defsym ERR=1 %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=ERR --implicit-check-not=error:
 
 // Test that we produce the correct relocation types and that the relocations
 // correctly point to the section or the symbol.
@@ -10,7 +11,7 @@
 // CHECK-NEXT:   Section {{.*}} .rel.text {
 /// Do not use STT_SECTION symbol for R_386_GOTOFF to work around a gold<2.34 bug
 /// https://sourceware.org/bugzilla/show_bug.cgi?id=16794
-// I386-NEXT:      0x2          R_386_GOTOFF     .rodata.str1.1
+// I386-NEXT:      0x2          R_386_GOTOFF     .Lfoo
 // IAMCU-NEXT:     0x2          R_386_GOTOFF     .rodata.str1.1
 // CHECK-NEXT:     0x{{[^ ]+}}  R_386_PLT32      bar2
 // CHECK-NEXT:     0x{{[^ ]+}}  R_386_GOTPC      _GLOBAL_OFFSET_TABLE_
@@ -126,6 +127,19 @@ bar2:
 
         .word foo
         .byte foo
+
+.ifdef ERR
+// ERR: [[#@LINE+1]]:7: error: unsupported relocation type
+.quad foo@GOT
+// ERR: [[#@LINE+1]]:8: error: unsupported relocation type
+.short foo@GOTOFF
+// ERR: [[#@LINE+1]]:7: error: unsupported relocation type
+.dc.w foo@TPOFF
+// ERR: [[#@LINE+1]]:7: error: unsupported relocation type
+.dc.w foo@INDNTPOFF
+// ERR: [[#@LINE+1]]:7: error: unsupported relocation type
+.dc.w foo@NTPOFF
+.endif
 
         .section        zedsec,"awT",@progbits
 zed:

@@ -19,10 +19,10 @@ void ExceptionAnalyzer::ExceptionInfo::registerException(
 
 void ExceptionAnalyzer::ExceptionInfo::registerExceptions(
     const Throwables &Exceptions) {
-  if (Exceptions.size() == 0)
+  if (Exceptions.empty())
     return;
   Behaviour = State::Throwing;
-  ThrownExceptions.insert(Exceptions.begin(), Exceptions.end());
+  ThrownExceptions.insert_range(Exceptions);
 }
 
 ExceptionAnalyzer::ExceptionInfo &ExceptionAnalyzer::ExceptionInfo::merge(
@@ -39,8 +39,7 @@ ExceptionAnalyzer::ExceptionInfo &ExceptionAnalyzer::ExceptionInfo::merge(
     Behaviour = State::Unknown;
 
   ContainsUnknown = ContainsUnknown || Other.ContainsUnknown;
-  ThrownExceptions.insert(Other.ThrownExceptions.begin(),
-                          Other.ThrownExceptions.end());
+  ThrownExceptions.insert_range(Other.ThrownExceptions);
   return *this;
 }
 
@@ -141,7 +140,10 @@ bool isStandardPointerConvertible(QualType From, QualType To) {
     if (RD->isCompleteDefinition() &&
         isBaseOf(From->getPointeeType().getTypePtr(),
                  To->getPointeeType().getTypePtr())) {
-      return true;
+      // If B is an inaccessible or ambiguous base class of D, a program
+      // that necessitates this conversion is ill-formed
+      return isUnambiguousPublicBaseClass(From->getPointeeType().getTypePtr(),
+                                          To->getPointeeType().getTypePtr());
     }
   }
 
@@ -175,7 +177,9 @@ bool isFunctionPointerConvertible(QualType From, QualType To) {
 
     // Note: converting Derived::* to Base::* is a different kind of conversion,
     // called Pointer-to-member conversion.
-    return FromMember->getClass() == ToMember->getClass() &&
+    return FromMember->getQualifier() == ToMember->getQualifier() &&
+           FromMember->getMostRecentCXXRecordDecl() ==
+               ToMember->getMostRecentCXXRecordDecl() &&
            FromMember->getPointeeType() == ToMember->getPointeeType();
   }
 
@@ -205,19 +209,21 @@ bool isQualificationConvertiblePointer(QualType From, QualType To,
   // cv-decomposition of T, that is, cv_1, cv_2, ... , cv_n, is called the
   // cv-qualification signature of T.
 
-  auto isValidP_i = [](QualType P) {
+  // NOLINTNEXTLINE (readability-identifier-naming): Preserve original notation
+  auto IsValidP_i = [](QualType P) {
     return P->isPointerType() || P->isMemberPointerType() ||
            P->isConstantArrayType() || P->isIncompleteArrayType();
   };
 
-  auto isSameP_i = [](QualType P1, QualType P2) {
+  // NOLINTNEXTLINE (readability-identifier-naming): Preserve original notation
+  auto IsSameP_i = [](QualType P1, QualType P2) {
     if (P1->isPointerType())
       return P2->isPointerType();
 
     if (P1->isMemberPointerType())
       return P2->isMemberPointerType() &&
-             P1->getAs<MemberPointerType>()->getClass() ==
-                 P2->getAs<MemberPointerType>()->getClass();
+             P1->getAs<MemberPointerType>()->getMostRecentCXXRecordDecl() ==
+                 P2->getAs<MemberPointerType>()->getMostRecentCXXRecordDecl();
 
     if (P1->isConstantArrayType())
       return P2->isConstantArrayType() &&
@@ -269,7 +275,7 @@ bool isQualificationConvertiblePointer(QualType From, QualType To,
     return true;
   };
 
-  while (isValidP_i(From) && isValidP_i(To)) {
+  while (IsValidP_i(From) && IsValidP_i(To)) {
     // Remove every sugar.
     From = From.getCanonicalType();
     To = To.getCanonicalType();
@@ -277,7 +283,7 @@ bool isQualificationConvertiblePointer(QualType From, QualType To,
     if (!SatisfiesCVRules(From, To))
       return false;
 
-    if (!isSameP_i(From, To)) {
+    if (!IsSameP_i(From, To)) {
       if (LangOpts.CPlusPlus20) {
         if (From->isConstantArrayType() && !To->isIncompleteArrayType())
           return false;
@@ -305,7 +311,7 @@ bool isQualificationConvertiblePointer(QualType From, QualType To,
   }
 
   // In this case the length (n) of From and To are not the same.
-  if (isValidP_i(From) || isValidP_i(To))
+  if (IsValidP_i(From) || IsValidP_i(To))
     return false;
 
   // We hit U.
@@ -315,6 +321,40 @@ bool isQualificationConvertiblePointer(QualType From, QualType To,
   return From.getTypePtr() == To.getTypePtr();
 }
 } // namespace
+
+static bool canThrow(const FunctionDecl *Func) {
+  // consteval specifies that every call to the function must produce a
+  // compile-time constant, which cannot evaluate a throw expression without
+  // producing a compilation error.
+  if (Func->isConsteval())
+    return false;
+
+  const auto *FunProto = Func->getType()->getAs<FunctionProtoType>();
+  if (!FunProto)
+    return true;
+
+  switch (FunProto->canThrow()) {
+  case CT_Cannot:
+    return false;
+  case CT_Dependent: {
+    const Expr *NoexceptExpr = FunProto->getNoexceptExpr();
+    if (!NoexceptExpr)
+      return true; // no noexcept - can throw
+
+    if (NoexceptExpr->isValueDependent())
+      return true; // depend on template - some instance can throw
+
+    bool Result = false;
+    if (!NoexceptExpr->EvaluateAsBooleanCondition(Result, Func->getASTContext(),
+                                                  /*InConstantContext=*/true))
+      return true;  // complex X condition in noexcept(X), cannot validate,
+                    // assume that may throw
+    return !Result; // noexcept(false) - can throw
+  }
+  default:
+    return true;
+  };
+}
 
 bool ExceptionAnalyzer::ExceptionInfo::filterByCatch(
     const Type *HandlerTy, const ASTContext &Context) {
@@ -347,10 +387,7 @@ bool ExceptionAnalyzer::ExceptionInfo::filterByCatch(
         isPointerOrPointerToMember(ExceptionCanTy->getTypePtr())) {
       // A standard pointer conversion not involving conversions to pointers to
       // private or protected or ambiguous classes ...
-      if (isStandardPointerConvertible(ExceptionCanTy, HandlerCanTy) &&
-          isUnambiguousPublicBaseClass(
-              ExceptionCanTy->getTypePtr()->getPointeeType().getTypePtr(),
-              HandlerCanTy->getTypePtr()->getPointeeType().getTypePtr())) {
+      if (isStandardPointerConvertible(ExceptionCanTy, HandlerCanTy)) {
         TypesToDelete.push_back(ExceptionTy);
       }
       // A function pointer conversion ...
@@ -376,7 +413,7 @@ bool ExceptionAnalyzer::ExceptionInfo::filterByCatch(
     ThrownExceptions.erase(T);
 
   reevaluateBehaviour();
-  return TypesToDelete.size() > 0;
+  return !TypesToDelete.empty();
 }
 
 ExceptionAnalyzer::ExceptionInfo &
@@ -390,7 +427,7 @@ ExceptionAnalyzer::ExceptionInfo::filterIgnoredExceptions(
       if (TD->getDeclName().isIdentifier()) {
         if ((IgnoreBadAlloc &&
              (TD->getName() == "bad_alloc" && TD->isInStdNamespace())) ||
-            (IgnoredTypes.count(TD->getName()) > 0))
+            (IgnoredTypes.contains(TD->getName())))
           TypesToDelete.push_back(T);
       }
     }
@@ -409,7 +446,7 @@ void ExceptionAnalyzer::ExceptionInfo::clear() {
 }
 
 void ExceptionAnalyzer::ExceptionInfo::reevaluateBehaviour() {
-  if (ThrownExceptions.size() == 0)
+  if (ThrownExceptions.empty())
     if (ContainsUnknown)
       Behaviour = State::Unknown;
     else
@@ -421,7 +458,8 @@ void ExceptionAnalyzer::ExceptionInfo::reevaluateBehaviour() {
 ExceptionAnalyzer::ExceptionInfo ExceptionAnalyzer::throwsException(
     const FunctionDecl *Func, const ExceptionInfo::Throwables &Caught,
     llvm::SmallSet<const FunctionDecl *, 32> &CallStack) {
-  if (CallStack.count(Func))
+  if (!Func || CallStack.contains(Func) ||
+      (!CallStack.empty() && !canThrow(Func)))
     return ExceptionInfo::createNonThrowing();
 
   if (const Stmt *Body = Func->getBody()) {
@@ -479,7 +517,7 @@ ExceptionAnalyzer::ExceptionInfo ExceptionAnalyzer::throwsException(
     for (unsigned I = 0; I < Try->getNumHandlers(); ++I) {
       const CXXCatchStmt *Catch = Try->getHandler(I);
 
-      // Everything is catched through 'catch(...)'.
+      // Everything is caught through 'catch(...)'.
       if (!Catch->getExceptionDecl()) {
         ExceptionInfo Rethrown = throwsException(
             Catch->getHandlerBlock(), Uncaught.getExceptionTypes(), CallStack);
@@ -533,7 +571,7 @@ ExceptionAnalyzer::ExceptionInfo ExceptionAnalyzer::throwsException(
     Results.merge(throwsException(Coro->getExceptionHandler(),
                                   Excs.getExceptionTypes(), CallStack));
     for (const Type *Throwable : Excs.getExceptionTypes()) {
-      if (const auto ThrowableRec = Throwable->getAsCXXRecordDecl()) {
+      if (const auto *ThrowableRec = Throwable->getAsCXXRecordDecl()) {
         ExceptionInfo DestructorExcs =
             throwsException(ThrowableRec->getDestructor(), Caught, CallStack);
         Results.merge(DestructorExcs);

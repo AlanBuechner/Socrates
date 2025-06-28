@@ -55,19 +55,9 @@ class LibcxxStringViewDataFormatterTestCase(TestBase):
             self.runCmd("type summary clear", check=False)
             self.runCmd("type filter clear", check=False)
             self.runCmd("type synth clear", check=False)
-            self.runCmd("settings set target.max-children-count 256", check=False)
 
         # Execute the cleanup function during test case tear down.
         self.addTearDownHook(cleanup)
-
-        if self.expectedCompiler(["clang"]) and self.expectedCompilerVersion(
-            [">", "16.0"]
-        ):
-            expected_basic_string = "std::basic_string<unsigned char>"
-            expected_basic_string_view = "std::basic_string_view<unsigned char>"
-        else:
-            expected_basic_string = "std::basic_string<unsigned char, std::char_traits<unsigned char>, std::allocator<unsigned char> >"
-            expected_basic_string_view = "std::basic_string_view<unsigned char, std::char_traits<unsigned char> >"
 
         self.expect_var_path("wempty", type="std::wstring_view", summary='L""')
         self.expect_var_path(
@@ -91,17 +81,11 @@ class LibcxxStringViewDataFormatterTestCase(TestBase):
             summary='L"hello world!\\0てざ ル゜䋨ミ㠧槊 きゅへ狦穤襩 じゃ馩リョ 䤦監"',
         )
         self.expect_var_path("u16_string", type="std::u16string_view", summary='u"ß水氶"')
-        self.expect_var_path("u16_empty", type="std::u16string_view", summary='""')
+        self.expect_var_path("u16_empty", type="std::u16string_view", summary='u""')
         self.expect_var_path(
             "u32_string", type="std::u32string_view", summary='U"🍄🍅🍆🍌"'
         )
-        self.expect_var_path("u32_empty", type="std::u32string_view", summary='""')
-        self.expect_var_path(
-            "uchar_source", type=expected_basic_string, summary='"aaaaaaaaaa"'
-        )
-        self.expect_var_path(
-            "uchar", type=expected_basic_string_view, summary='"aaaaa"'
-        )
+        self.expect_var_path("u32_empty", type="std::u32string_view", summary='U""')
         self.expect_var_path(
             "oops", type="std::string_view", summary='"Hellooo World\\n"'
         )
@@ -120,17 +104,17 @@ class LibcxxStringViewDataFormatterTestCase(TestBase):
         uncappedSummaryStream = lldb.SBStream()
         TheVeryLongOne.GetSummary(uncappedSummaryStream, summaryOptions)
         uncappedSummary = uncappedSummaryStream.GetData()
-        self.assertTrue(
-            uncappedSummary.find("someText") > 0,
+        self.assertGreater(
+            uncappedSummary.find("someText"),
+            0,
             "uncappedSummary does not include the full string",
         )
         summaryOptions.SetCapping(lldb.eTypeSummaryCapped)
         cappedSummaryStream = lldb.SBStream()
         TheVeryLongOne.GetSummary(cappedSummaryStream, summaryOptions)
         cappedSummary = cappedSummaryStream.GetData()
-        self.assertTrue(
-            cappedSummary.find("someText") <= 0,
-            "cappedSummary includes the full string",
+        self.assertLessEqual(
+            cappedSummary.find("someText"), 0, "cappedSummary includes the full string"
         )
 
         self.expect_expr(
@@ -161,17 +145,11 @@ class LibcxxStringViewDataFormatterTestCase(TestBase):
             summary='L"hello world!\\0てざ ル゜䋨ミ㠧槊 きゅへ狦穤襩 じゃ馩リョ 䤦監"',
         )
         self.expect_var_path("u16_string", type="std::u16string_view", summary='u"ß水氶"')
-        self.expect_var_path("u16_empty", type="std::u16string_view", summary='""')
+        self.expect_var_path("u16_empty", type="std::u16string_view", summary='u""')
         self.expect_var_path(
             "u32_string", type="std::u32string_view", summary='U"🍄🍅🍆🍌"'
         )
-        self.expect_var_path("u32_empty", type="std::u32string_view", summary='""')
-        self.expect_var_path(
-            "uchar_source", type=expected_basic_string, summary='"aaaaaaaaaa"'
-        )
-        self.expect_var_path(
-            "uchar", type=expected_basic_string_view, summary='"aaaaa"'
-        )
+        self.expect_var_path("u32_empty", type="std::u32string_view", summary='U""')
 
         self.runCmd("cont")
         self.expect(
